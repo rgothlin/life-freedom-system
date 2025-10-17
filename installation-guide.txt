@@ -1,0 +1,368 @@
+====================================
+LIFE FREEDOM SYSTEM
+Komplett installationsguide
+====================================
+
+INNEHÅLL:
+1. Förutsättningar
+2. Installation steg-för-steg
+3. Skapa alla nödvändiga filer
+4. Första konfiguration
+5. Testa att allt fungerar
+6. Felsökning
+
+====================================
+1. FÖRUTSÄTTNINGAR
+====================================
+
+✓ WordPress 5.8 eller senare
+✓ PHP 7.4 eller senare
+✓ MetaBox.io plugin (OBLIGATORISKT!)
+✓ FTP/SFTP-åtkomst till din WordPress-installation
+  ELLER tillgång till cPanel File Manager
+  ELLER SSH-åtkomst
+
+====================================
+2. INSTALLATION STEG-FÖR-STEG
+====================================
+
+STEG 1: Installera MetaBox.io
+------------------------------
+1. Logga in på WordPress Admin
+2. Gå till Plugins → Add New
+3. Sök efter "Meta Box"
+4. Installera och aktivera "Meta Box" av MetaBox.io
+5. Installera även alla tillgängliga Meta Box extensions
+
+VIKTIGT: Om du har MetaBox.io premium, installera alla dina extensions!
+
+STEG 2: Skapa plugin-mappen
+----------------------------
+Via FTP/File Manager:
+1. Gå till /wp-content/plugins/
+2. Skapa ny mapp: life-freedom-system
+3. Öppna mappen
+
+Via SSH:
+cd /path/to/wordpress/wp-content/plugins/
+mkdir life-freedom-system
+cd life-freedom-system
+
+STEG 3: Skapa mappstrukturen
+-----------------------------
+Skapa följande mappar:
+
+life-freedom-system/
+├── includes/
+├── admin/
+│   └── views/
+├── assets/
+│   ├── css/
+│   └── js/
+└── languages/
+
+Via FTP: Skapa varje mapp manuellt
+Via SSH:
+mkdir -p includes admin/views assets/css assets/js languages
+
+====================================
+3. SKAPA ALLA NÖDVÄNDIGA FILER
+====================================
+
+Du behöver skapa följande filer med innehållet från artifacts:
+
+ROTNIVÅ:
+--------
+✓ life-freedom-system.php (huvudfilen)
+✓ README.md (denna guide finns också där)
+
+INCLUDES-MAPPEN:
+----------------
+✓ includes/class-lfs-meta-boxes.php
+✓ includes/class-lfs-calculations.php
+✓ includes/class-lfs-dashboard.php
+✓ includes/class-lfs-rewards.php
+✓ includes/class-lfs-financial.php
+
+ADMIN/VIEWS-MAPPEN:
+-------------------
+✓ admin/views/dashboard.php
+✓ admin/views/rewards.php
+✓ admin/views/financial.php
+✓ admin/views/settings.php
+
+ASSETS/CSS-MAPPEN:
+------------------
+✓ assets/css/admin.css
+✓ assets/css/frontend.css
+
+ASSETS/JS-MAPPEN:
+-----------------
+✓ assets/js/admin.js
+✓ assets/js/frontend.js
+
+CHECKLISTA FÖR ALLA FILER:
+[ ] life-freedom-system.php
+[ ] includes/class-lfs-meta-boxes.php
+[ ] includes/class-lfs-calculations.php
+[ ] includes/class-lfs-dashboard.php
+[ ] includes/class-lfs-rewards.php
+[ ] includes/class-lfs-financial.php
+[ ] admin/views/dashboard.php
+[ ] admin/views/rewards.php
+[ ] admin/views/financial.php
+[ ] admin/views/settings.php
+[ ] assets/css/admin.css
+[ ] assets/css/frontend.css
+[ ] assets/js/admin.js
+[ ] assets/js/frontend.js
+
+====================================
+4. AKTIVERA PLUGINEN
+====================================
+
+1. Gå till WordPress Admin → Plugins
+2. Hitta "Life Freedom System" i listan
+3. Klicka "Activate"
+
+Om aktiveringen lyckas ser du:
+- En ny menypunkt "Freedom System" i adminmenyn
+- Inga felmeddelanden
+
+Om aktiveringen MISSLYCKAS:
+- Se felsökningsavsnittet nedan
+
+====================================
+5. FÖRSTA KONFIGURATION
+====================================
+
+STEG 1: Skapa standardtermer
+-----------------------------
+Pluginen skapar automatiskt:
+✓ Aktivitetskategorier (Arbete, Hemma, Fritid, Ekonomi, Träning)
+✓ Arbetskontext (Heltidsjobb, Eget projekt, Hemma, Fritid)
+✓ Livsfaser (Survival, Stabilisering, Autonomi)
+✓ Belöningsnivåer (Nivå 0-4)
+✓ Konton (Hyra, Mat, Elias, etc.)
+
+STEG 2: Konfigurera inställningar
+----------------------------------
+1. Gå till Freedom System → Inställningar
+
+2. Välj din livsfas:
+   [ ] Survival - Har heltidsjobb, ekonomiskt pressat
+   [ ] Stabilisering - Egna projekt börjar ge inkomst
+   [ ] Autonomi - Full självständighet
+
+3. Sätt poäng per krona:
+   - Survival: 0.5 (10 poäng = 5 kr)
+   - Stabilisering: 0.8 (10 poäng = 8 kr)
+   - Autonomi: 1.0 (10 poäng = 10 kr)
+
+4. Sätt veckomål:
+   - FP-mål: 400-600
+   - BP-mål: 250-400
+   - SP-mål: 300-500
+
+5. Ekonomiska inställningar:
+   - Månadsinkomst: Din inkomst efter skatt
+   - Belöningskonto %: 2-10% (beroende på fas)
+
+6. Klicka "Spara inställningar"
+
+STEG 3: Skapa din första aktivitet
+-----------------------------------
+1. Gå till Freedom System → Aktiviteter → Add New
+2. Titel: "Test-aktivitet"
+3. Sätt poäng:
+   - FP: 50
+   - BP: 20
+   - SP: 10
+4. Välj kategori och typ
+5. Klicka "Publish"
+
+STEG 4: Kontrollera dashboarden
+--------------------------------
+1. Gå till Freedom System → Dashboard
+2. Du ska nu se:
+   - Dina poäng (50 FP, 20 BP, 10 SP)
+   - Grafer som visar aktivitet
+   - Snabbloggning-sektion
+
+STEG 5: Skapa dina första belöningar
+-------------------------------------
+1. Gå till Freedom System → Belöningar → Add New
+2. Exempel: "Fika på café"
+3. Kostnad: 50 kr
+4. Poängkrav: 60 totalt poäng
+5. Välj Belöningsnivå: "Nivå 1 - Daglig"
+6. Klicka "Publish"
+
+Skapa minst 5-10 belöningar i olika nivåer.
+
+STEG 6: Skapa dina projekt (valfritt)
+--------------------------------------
+1. Gå till Freedom System → Projekt → Add New
+2. Titel: Namnet på ditt projekt
+3. Status: Aktiv
+4. FP-mål för nästa milstolpe: 500
+5. Målinkomst: Det du vill tjäna
+6. Klicka "Publish"
+
+====================================
+6. TESTA ATT ALLT FUNGERAR
+====================================
+
+TEST 1: Dashboarden
+-------------------
+✓ Går det att öppna Dashboard?
+✓ Visas grafer korrekt?
+✓ Finns snabbloggning?
+✓ Ser du dina poäng?
+
+TEST 2: Skapa aktivitet
+------------------------
+✓ Kan du skapa ny aktivitet?
+✓ Kan du sätta poäng (FP, BP, SP)?
+✓ Sparas aktiviteten?
+✓ Uppdateras dashboarden?
+
+TEST 3: Belöningar
+-------------------
+✓ Kan du skapa belöning?
+✓ Visas belöningen på Belöningssidan?
+✓ Kan du se vilka du har råd med?
+✓ Kan du lösa in belöning (om du har poäng)?
+
+TEST 4: Ekonomi
+---------------
+✓ Kan du öppna Ekonomisidan?
+✓ Ser du dina konton?
+✓ Kan du skapa transaktion?
+✓ Uppdateras kontosaldon?
+
+TEST 5: Inställningar
+----------------------
+✓ Kan du ändra inställningar?
+✓ Sparas ändringarna?
+✓ Påverkar inställningarna systemet?
+
+====================================
+7. FELSÖKNING
+====================================
+
+PROBLEM: Pluginen syns inte i plugin-listan
+LÖSNING:
+- Kontrollera att alla filer är på rätt plats
+- Kontrollera att life-freedom-system.php finns i rotmappen
+- Kontrollera filrättigheter (ska vara 644 för filer, 755 för mappar)
+
+PROBLEM: "Fatal error" vid aktivering
+LÖSNING:
+- Aktivera WordPress debug: WP_DEBUG = true i wp-config.php
+- Se vilken fil som orsakar felet
+- Kontrollera att alla PHP-taggar är korrekta
+- Kontrollera att inget "<?php" saknas i början av filer
+
+PROBLEM: MetaBox-fält visas inte
+LÖSNING:
+- Kontrollera att Meta Box är aktiverat
+- Gå till Settings → Meta Box → Extensions
+- Aktivera alla tillgängliga extensions
+- Testa att deaktivera och aktivera pluginen igen
+
+PROBLEM: Dashboarden visar inga grafer
+LÖSNING:
+- Öppna browser console (F12)
+- Kolla efter JavaScript-fel
+- Kontrollera att Chart.js laddas
+- Töm browser cache
+- Töm WordPress cache
+
+PROBLEM: Kan inte spara aktiviteter
+LÖSNING:
+- Kontrollera PHP-versionen (minst 7.4)
+- Öka PHP memory limit i wp-config.php:
+  define('WP_MEMORY_LIMIT', '256M');
+- Kontrollera filrättigheter
+
+PROBLEM: CSS ser konstigt ut
+LÖSNING:
+- Töm browser cache (Ctrl+Shift+Del)
+- Töm WordPress cache
+- Kontrollera att admin.css finns och laddas
+- Kontrollera Console för 404-fel på CSS-filer
+
+PROBLEM: AJAX fungerar inte
+LÖSNING:
+- Kontrollera att admin.js laddas
+- Öppna browser console, kolla efter fel
+- Kontrollera att lfsData är definierat
+- Testa med en annan browser
+
+PROBLEM: Poäng beräknas fel
+LÖSNING:
+- Öppna class-lfs-calculations.php
+- Kontrollera beräkningsmetoderna
+- Testa att spara aktivitet igen
+- Kontrollera att aktiviteten är Published
+
+====================================
+8. SUPPORT OCH HJÄLP
+====================================
+
+Om du fortsatt har problem:
+
+1. Aktivera debug-läge:
+   I wp-config.php:
+   define('WP_DEBUG', true);
+   define('WP_DEBUG_LOG', true);
+   define('WP_DEBUG_DISPLAY', false);
+
+2. Kolla debug.log:
+   /wp-content/debug.log
+
+3. Testa med standard-tema (Twenty Twenty-Three)
+
+4. Testa med bara Meta Box + Life Freedom System aktiverat
+   (inaktivera andra plugins temporärt)
+
+5. Kontakta utvecklaren med:
+   - WordPress version
+   - PHP version
+   - Aktiverade plugins
+   - Felmeddelanden från debug.log
+
+====================================
+9. TIPS FÖR FRAMGÅNG
+====================================
+
+✓ Logga aktiviteter VARJE dag
+✓ Var ärlig med poäng
+✓ Se över veckomål varje söndag
+✓ Lös in belöningar du förtjänat
+✓ Följ din budget
+✓ Fira när du inte har läckor
+✓ Justera systemet efter dina behov
+✓ Var konsekvent - det är nyckeln!
+
+====================================
+10. NÄSTA STEG
+====================================
+
+När allt fungerar:
+
+1. Skapa alla dina belöningar (minst 20 st)
+2. Definiera dina projekt
+3. Skapa milstolpar för stora mål
+4. Börja logga aktiviteter dagligen
+5. Se över ekonomin veckovis
+6. Anpassa poängvärden efter dina behov
+7. Lägg till fler aktivitetsmallar
+8. Experimentera och hitta din rytm!
+
+====================================
+
+Lycka till på din resa mot frihet! 🚀
+
+====================================
