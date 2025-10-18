@@ -507,3 +507,30 @@
 .lfs-widget {
     animation: fadeIn 0.3s ease-out;
 }
+
+/* --- LFS fix: prevent Chart.js resize feedback loop --- */
+.lfs-chart-wrap {
+  position: relative;
+  height: 300px;
+}
+@media (min-width: 1200px) {
+  .lfs-chart-wrap { height: 340px; }
+}
+.lfs-dashboard .lfs-chart-wrap > canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Fallback for canvases not wrapped at markup time */
+.lfs-dashboard canvas[id^="lfs"] {
+  display: block;
+  width: 100% !important;
+  height: 300px !important;
+}
+@media (min-width: 1200px) {
+  .lfs-dashboard canvas[id^="lfs"] {
+    height: 340px !important;
+  }
+}
+/* --- End LFS fix --- */
