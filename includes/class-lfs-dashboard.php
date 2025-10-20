@@ -1,14 +1,25 @@
 <?php
 /**
- * Dashboard Class - Förbättrad version med realtidsuppdatering
+ * Dashboard Class - FIXAD baserat på faktisk struktur
  * 
- * File location: admin/class-lfs-dashboard.php
+ * File location: includes/class-lfs-dashboard.php
  * Handles dashboard functionality and AJAX requests
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
+
+add_action('init', function () {
+    $activity_post_type = 'life_activity';
+    $template_post_type = 'lfs_activity_tpl'; // <-- justera om du använder annan slug
+
+    $taxonomies = get_object_taxonomies($activity_post_type, 'names');
+    foreach ($taxonomies as $tax) {
+        register_taxonomy_for_object_type($tax, $template_post_type);
+    }
+}, 20);
+
 
 class LFS_Dashboard {
     
@@ -290,85 +301,208 @@ class LFS_Dashboard {
     }
     
     /**
-     * AJAX: Quick log från template (NY METOD)
-     */
-    public function ajax_quick_log_template() {
-        check_ajax_referer('lfs_nonce', 'nonce');
-        
-        $template_id = isset($_POST['template_id']) ? intval($_POST['template_id']) : 0;
-        
-        if (!$template_id) {
-            wp_send_json_error(__('Ogiltigt mall-ID', 'life-freedom-system'));
-        }
-        
-        // Hämta template data
-        $template = get_post($template_id);
-        
-        if (!$template || $template->post_type !== 'lfs_activity_tpl') {
-            wp_send_json_error(__('Mall hittades inte', 'life-freedom-system'));
-        }
-        
-        // Hämta template metadata
-        $fp = intval(get_post_meta($template_id, '_lfs_fp', true));
-        $bp = intval(get_post_meta($template_id, '_lfs_bp', true));
-        $sp = intval(get_post_meta($template_id, '_lfs_sp', true));
-        $category = get_post_meta($template_id, '_lfs_category', true);
-        $type = get_post_meta($template_id, '_lfs_type', true);
-        $context = get_post_meta($template_id, '_lfs_context', true);
-        
-        // Skapa aktivitet från template
-        $post_id = wp_insert_post(array(
-            'post_type' => 'life_activity',
-            'post_title' => $template->post_title,
-            'post_status' => 'publish',
-        ));
-        
-        if (is_wp_error($post_id)) {
-            wp_send_json_error($post_id->get_error_message());
-        }
-        
-        // Spara metadata
-        update_post_meta($post_id, 'lfs_fp', $fp);
-        update_post_meta($post_id, 'lfs_bp', $bp);
-        update_post_meta($post_id, 'lfs_sp', $sp);
-        update_post_meta($post_id, 'lfs_activity_datetime', current_time('timestamp'));
-        update_post_meta($post_id, 'lfs_template_id', $template_id);
-        
-        // Lägg till taxonomies
-        if (!empty($category)) {
-            wp_set_object_terms($post_id, $category, 'activity_category');
-        }
-        if (!empty($type)) {
-            wp_set_object_terms($post_id, $type, 'activity_type');
-        }
-        if (!empty($context)) {
-            wp_set_object_terms($post_id, $context, 'work_context');
-        }
-        
-        // Hämta uppdaterad data för UI
-        $calculations = LFS_Calculations::get_instance();
-        
-        wp_send_json_success(array(
-            'id' => $post_id,
-            'message' => __('Aktivitet loggad!', 'life-freedom-system'),
-            'points' => $calculations->get_current_points(),
-            'weekly_points' => $calculations->get_weekly_points(),
-            'weekly_goals' => array(
-                'fp' => intval(get_option('lfs_weekly_fp_goal', 500)),
-                'bp' => intval(get_option('lfs_weekly_bp_goal', 300)),
-                'sp' => intval(get_option('lfs_weekly_sp_goal', 400)),
-            ),
-            'chart_data' => $this->get_formatted_chart_data(7),
-            'points_added' => array(
-                'fp' => $fp,
-                'bp' => $bp,
-                'sp' => $sp
-            )
-        ));
+ * ERSÄTT ajax_quick_log_template() i class-lfs-dashboard.php
+ * METABOX-KOMPATIBEL VERSION
+ */
+
+public function ajax_quick_log_template() {
+    check_ajax_referer('lfs_nonce', 'nonce');
+    
+    $template_id = isset($_POST['template_id']) ? intval($_POST['template_id']) : 0;
+    
+    if (!$template_id) {
+        wp_send_json_error('Ogiltigt mall-ID');
     }
     
+    // Hämta template
+    $template = get_post($template_id);
+    
+    if (!$template) {
+        wp_send_json_error('Mall hittades inte');
+    }
+    
+    // === HELPER: Hämta metadata robust (hanterar både array och string) ===
+    $get_meta_value = function($post_id, $key) {
+    $tpl_key = (strpos($key, 'lfs_tpl_') === 0) ? $key : 'lfs_tpl_' . preg_replace('/^lfs_/', '', $key);
+    $value = null;
+    if (function_exists('rwmb_meta')) {
+        $value = rwmb_meta($tpl_key, array(), $post_id);
+        if (empty($value)) {
+            $value = rwmb_meta($key, array(), $post_id);
+        }
+    }
+    if (empty($value)) {
+        $value = get_post_meta($post_id, $tpl_key, true);
+        if (empty($value)) {
+            $value = get_post_meta($post_id, $key, true);
+        }
+    }
+    if (is_array($value) && !empty($value)) { $value = reset($value); }
+    return $value;
+};
+    
+    // === HÄMTA ALL METADATA FRÅN TEMPLATE ===
+    
+    $fp = intval($get_meta_value($template_id, 'lfs_tpl_fp'));
+    $bp = intval($get_meta_value($template_id, 'lfs_tpl_bp'));
+    $sp = intval($get_meta_value($template_id, 'lfs_tpl_sp'));
+    
+    $category = $get_meta_value($template_id, 'lfs_category');
+    $type = $get_meta_value($template_id, 'lfs_type');
+    $context = $get_meta_value($template_id, 'lfs_context');
+    $duration = $get_meta_value($template_id, 'lfs_duration');
+    $notes = $get_meta_value($template_id, 'lfs_notes');
+    $energy_level = $get_meta_value($template_id, 'lfs_energy_level');
+    $importance = $get_meta_value($template_id, 'lfs_importance');
+    $project_id = $get_meta_value($template_id, 'lfs_related_project');
+    
+    // === DEBUG (ta bort efter testning) ===
+    error_log('=== QUICK LOG TEMPLATE DEBUG ===');
+    error_log('Template ID: ' . $template_id);
+    error_log('FP: ' . $fp);
+    error_log('BP: ' . $bp);
+    error_log('SP: ' . $sp);
+    error_log('Category: ' . $category);
+    error_log('Type: ' . $type);
+    error_log('Context: ' . $context);
+    // === SLUT DEBUG ===
+    
+    // === SKAPA NY AKTIVITET ===
+    
+    $post_id = wp_insert_post(array(
+        'post_type' => 'life_activity',
+        'post_title' => $template->post_title,
+        'post_content' => $template->post_content,
+        'post_status' => 'publish',
+        'post_author' => get_current_user_id(),
+    ));
+    
+    if (is_wp_error($post_id)) {
+        wp_send_json_error($post_id->get_error_message());
+    }
+    
+    // === SPARA ALL METADATA TILL NYA AKTIVITETEN ===
+    
+    // Poäng (ALLTID spara, även om 0)
+    update_post_meta($post_id, 'lfs_fp', $fp);
+    update_post_meta($post_id, 'lfs_bp', $bp);
+    update_post_meta($post_id, 'lfs_sp', $sp);
+    update_post_meta($post_id, 'lfs_activity_datetime', current_time('timestamp'));
+    update_post_meta($post_id, 'lfs_template_id', $template_id);
+    
+    // Övriga fält (spara även tomma för konsekvens)
+    update_post_meta($post_id, 'lfs_category', $category);
+    update_post_meta($post_id, 'lfs_type', $type);
+
+    if (!empty($project_id)) { update_post_meta($post_id, 'lfs_related_project', $project_id); }
+    if (!empty($milestone_id)) { update_post_meta($post_id, 'lfs_related_milestone', $milestone_id); }
+if ($duration) {
+        update_post_meta($post_id, 'lfs_duration', $duration);
+    }
+    if ($notes) {
+        update_post_meta($post_id, 'lfs_notes', $notes);
+    }
+    if ($energy_level) {
+        update_post_meta($post_id, 'lfs_energy_level', $energy_level);
+    }
+    if ($importance) {
+        update_post_meta($post_id, 'lfs_importance', $importance);
+    }
+    if ($project_id) {
+        update_post_meta($post_id, 'lfs_related_project', $project_id);
+    }
+    
+    // === KOPIERA TAXONOMIER ===
+    
+    
+    $taxonomies = get_object_taxonomies('life_activity', 'names');
+    if (!empty($taxonomies)) {
+        foreach ($taxonomies as $taxonomy) {
+            $terms = wp_get_object_terms($template_id, $taxonomy, ['fields' => 'ids']);
+            if (!is_wp_error($terms) && !empty($terms)) {
+                wp_set_object_terms($post_id, $terms, $taxonomy, false);
+            }
+        }
+    }
+
+    
+    // === KOPIERA ÄVEN TAXONOMIER FRÅN TEMPLATE POST TYPE ===
+    
+    // Om template har annan post type, kopiera därifrån också
+    $template_taxonomies = get_object_taxonomies($template->post_type);
+    if (!empty($template_taxonomies)) {
+        foreach ($template_taxonomies as $taxonomy) {
+            $terms = wp_get_object_terms($template_id, $taxonomy, array('fields' => 'ids'));
+            if (!is_wp_error($terms) && !empty($terms)) {
+                // Försök sätta på life_activity (kanske samma taxonomi används)
+                wp_set_object_terms($post_id, $terms, $taxonomy);
+            }
+        }
+    }
+    
+    // === UPPDATERA TOTALA POÄNG ===
+    
+    $current_fp = intval(get_option('lfs_current_fp', 0));
+    $current_bp = intval(get_option('lfs_current_bp', 0));
+    $current_sp = intval(get_option('lfs_current_sp', 0));
+    
+    update_option('lfs_current_fp', $current_fp + $fp);
+    update_option('lfs_current_bp', $current_bp + $bp);
+    update_option('lfs_current_sp', $current_sp + $sp);
+    
+    // Uppdatera veckovisa poäng
+    $weekly_fp = intval(get_option('lfs_weekly_fp', 0));
+    $weekly_bp = intval(get_option('lfs_weekly_bp', 0));
+    $weekly_sp = intval(get_option('lfs_weekly_sp', 0));
+    
+    update_option('lfs_weekly_fp', $weekly_fp + $fp);
+    update_option('lfs_weekly_bp', $weekly_bp + $bp);
+    update_option('lfs_weekly_sp', $weekly_sp + $sp);
+    
+    // === DEBUG: Verifiera att metadata sparades ===
+    error_log('=== SAVED TO NEW ACTIVITY ===');
+    error_log('New Activity ID: ' . $post_id);
+    error_log('Saved FP: ' . get_post_meta($post_id, 'lfs_fp', true));
+    error_log('Saved BP: ' . get_post_meta($post_id, 'lfs_bp', true));
+    error_log('Saved SP: ' . get_post_meta($post_id, 'lfs_sp', true));
+    error_log('Saved Category: ' . get_post_meta($post_id, 'lfs_category', true));
+    // === SLUT DEBUG ===
+    
+    // === RETURNERA SUCCESS ===
+    
+    wp_send_json_success(array(
+        'id' => $post_id,
+        'message' => 'Aktivitet loggad!',
+        'points' => array(
+            'fp' => $current_fp + $fp,
+            'bp' => $current_bp + $bp,
+            'sp' => $current_sp + $sp,
+        ),
+        'weekly_points' => array(
+            'fp' => $weekly_fp + $fp,
+            'bp' => $weekly_bp + $bp,
+            'sp' => $weekly_sp + $sp,
+        ),
+        'points_added' => array(
+            'fp' => $fp,
+            'bp' => $bp,
+            'sp' => $sp,
+        ),
+        'debug' => array(
+            'template_id' => $template_id,
+            'new_post_id' => $post_id,
+            'fp' => $fp,
+            'bp' => $bp,
+            'sp' => $sp,
+            'category' => $category,
+            'type' => $type,
+            'context' => $context,
+        )
+    ));
+}
+    
     /**
-     * AJAX: Quick add activity (FÖRBÄTTRAD)
+     * AJAX: Quick add activity
      */
     public function ajax_quick_add_activity() {
         check_ajax_referer('lfs_nonce', 'nonce');
@@ -401,6 +535,7 @@ class LFS_Dashboard {
             'post_type' => 'life_activity',
             'post_title' => $title,
             'post_status' => 'publish',
+            'post_author' => get_current_user_id(),
         ));
         
         if (is_wp_error($post_id)) {
@@ -413,6 +548,19 @@ class LFS_Dashboard {
         update_post_meta($post_id, 'lfs_sp', $sp);
         update_post_meta($post_id, 'lfs_activity_datetime', current_time('timestamp'));
         
+        // Spara kategorier etc
+        if ($category) {
+            update_post_meta($post_id, 'lfs_category', $category);
+        }
+        if ($type) {
+            update_post_meta($post_id, 'lfs_type', $type);
+        }
+        if ($context) {
+
+            if (!empty($project_id)) { update_post_meta($post_id, 'lfs_related_project', $project_id); }
+            if (!empty($milestone_id)) { update_post_meta($post_id, 'lfs_related_milestone', $milestone_id); }
+        }
+        
         // Lägg till taxonomies
         if (!empty($category)) {
             wp_set_object_terms($post_id, $category, 'activity_category');
@@ -424,9 +572,11 @@ class LFS_Dashboard {
             wp_set_object_terms($post_id, $context, 'work_context');
         }
         
-        // Hämta uppdaterad data för UI
+        // Lägg till poäng till systemet
         $calculations = LFS_Calculations::get_instance();
+        $calculations->add_points($fp, $bp, $sp);
         
+        // Hämta uppdaterad data för UI
         wp_send_json_success(array(
             'id' => $post_id,
             'message' => sprintf(__('Aktivitet "%s" tillagd!', 'life-freedom-system'), $title),

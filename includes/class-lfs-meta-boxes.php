@@ -358,86 +358,128 @@ class LFS_Meta_Boxes {
             'post_types' => array('lfs_reward'),
             'context' => 'normal',
             'fields' => array(
+                // Kostnad och typ
                 array(
+                    'id'   => 'lfs_reward_cost',
                     'name' => __('Kostnad (kr)', 'life-freedom-system'),
-                    'id' => 'lfs_reward_cost',
+                    'desc' => __('Hur mycket kostar denna belöning? Sätt till 0 för gratis belöningar', 'life-freedom-system'),
                     'type' => 'number',
-                    'min' => 0,
-                    'step' => 10,
-                    'prepend' => 'kr',
-                    'desc' => __('0 för gratis belöningar', 'life-freedom-system'),
+                    'min'  => 0,
+                    'step' => 1,
+                    'std'  => 0,
                 ),
+                
                 array(
-                    'name' => __('Belöningstyp', 'life-freedom-system'),
-                    'id' => 'lfs_reward_type',
-                    'type' => 'select',
+                    'id'      => 'lfs_reward_type',
+                    'name'    => __('Typ av belöning', 'life-freedom-system'),
+                    'type'    => 'select',
                     'options' => array(
-                        'free' => __('Gratis', 'life-freedom-system'),
-                        'economic' => __('Ekonomisk', 'life-freedom-system'),
-                        'experience' => __('Upplevelse', 'life-freedom-system'),
-                        'transfer' => __('Överföring till belöningskonto', 'life-freedom-system'),
+                        'psychological' => __('Psykologisk (gratis upplevelse)', 'life-freedom-system'),
+                        'material'      => __('Materiell (köpa något)', 'life-freedom-system'),
+                        'experience'    => __('Upplevelse (aktivitet)', 'life-freedom-system'),
+                    ),
+                    'std'     => 'psychological',
+                ),
+                
+                array(
+                    'type' => 'divider',
+                ),
+                
+                // Poängkrav
+                array(
+                    'id'   => 'lfs_reward_fp_required',
+                    'name' => __('FP krävs', 'life-freedom-system'),
+                    'desc' => __('Antal Freedom Points som krävs', 'life-freedom-system'),
+                    'type' => 'number',
+                    'min'  => 0,
+                    'std'  => 0,
+                ),
+                
+                array(
+                    'id'   => 'lfs_reward_bp_required',
+                    'name' => __('BP krävs', 'life-freedom-system'),
+                    'desc' => __('Antal Balance Points som krävs', 'life-freedom-system'),
+                    'type' => 'number',
+                    'min'  => 0,
+                    'std'  => 0,
+                ),
+                
+                array(
+                    'id'   => 'lfs_reward_sp_required',
+                    'name' => __('SP krävs', 'life-freedom-system'),
+                    'desc' => __('Antal Stability Points som krävs', 'life-freedom-system'),
+                    'type' => 'number',
+                    'min'  => 0,
+                    'std'  => 0,
+                ),
+                
+                array(
+                    'id'   => 'lfs_reward_total_required',
+                    'name' => __('ELLER totalt poäng', 'life-freedom-system'),
+                    'desc' => __('Om du fyller i detta så räcker det med totalt poäng oavsett typ', 'life-freedom-system'),
+                    'type' => 'number',
+                    'min'  => 0,
+                    'std'  => 0,
+                ),
+                
+                array(
+                    'type' => 'divider',
+                ),
+                
+                // NYTT: Recurring rewards
+                array(
+                    'id'   => 'lfs_reward_recurring',
+                    'name' => __('Återkommande belöning?', 'life-freedom-system'),
+                    'desc' => __('Markera om denna belöning ska återställas automatiskt efter inlösning. Perfekt för dagliga belöningar och vanor.', 'life-freedom-system'),
+                    'type' => 'checkbox',
+                    'std'  => 0,
+                ),
+                
+                array(
+                    'id'      => 'lfs_reward_recurring_frequency',
+                    'name'    => __('Återställningsfrekvens', 'life-freedom-system'),
+                    'desc'    => __('Hur ofta ska belöningen återställas?', 'life-freedom-system'),
+                    'type'    => 'select',
+                    'options' => array(
+                        'daily'   => __('Dagligen (vid midnatt)', 'life-freedom-system'),
+                        'weekly'  => __('Veckovis (på måndag)', 'life-freedom-system'),
+                        'monthly' => __('Månadsvis (första dagen)', 'life-freedom-system'),
+                    ),
+                    'std'     => 'daily',
+                    'visible' => array(
+                        'when'     => array(array('lfs_reward_recurring', '=', '1')),
+                        'relation' => 'and',
                     ),
                 ),
+                
                 array(
                     'type' => 'divider',
                 ),
+                
+                // Status
                 array(
-                    'name' => __('Poängkrav', 'life-freedom-system'),
-                    'type' => 'heading',
-                ),
-                array(
-                    'name' => __('FP-krav', 'life-freedom-system'),
-                    'id' => 'lfs_reward_fp_required',
-                    'type' => 'number',
-                    'min' => 0,
-                    'step' => 10,
-                    'std' => 0,
-                ),
-                array(
-                    'name' => __('BP-krav', 'life-freedom-system'),
-                    'id' => 'lfs_reward_bp_required',
-                    'type' => 'number',
-                    'min' => 0,
-                    'step' => 10,
-                    'std' => 0,
-                ),
-                array(
-                    'name' => __('SP-krav', 'life-freedom-system'),
-                    'id' => 'lfs_reward_sp_required',
-                    'type' => 'number',
-                    'min' => 0,
-                    'step' => 10,
-                    'std' => 0,
-                ),
-                array(
-                    'name' => __('ELLER total poängkrav', 'life-freedom-system'),
-                    'id' => 'lfs_reward_total_required',
-                    'type' => 'number',
-                    'min' => 0,
-                    'step' => 10,
-                    'std' => 0,
-                    'desc' => __('Om ifylld, kan belöningen köpas med vilken poängtyp som helst', 'life-freedom-system'),
-                ),
-                array(
-                    'type' => 'divider',
-                ),
-                array(
-                    'name' => __('Status', 'life-freedom-system'),
-                    'id' => 'lfs_reward_status',
-                    'type' => 'select',
+                    'id'      => 'lfs_reward_status',
+                    'name'    => __('Status', 'life-freedom-system'),
+                    'type'    => 'select',
                     'options' => array(
                         'available' => __('Tillgänglig', 'life-freedom-system'),
-                        'redeemed' => __('Inlöst', 'life-freedom-system'),
-                        'saved' => __('Sparad', 'life-freedom-system'),
+                        'redeemed'  => __('Inlöst', 'life-freedom-system'),
                     ),
-                    'std' => 'available',
+                    'std'     => 'available',
                 ),
+                
                 array(
-                    'name' => __('Inlöst datum', 'life-freedom-system'),
-                    'id' => 'lfs_reward_redeemed_date',
-                    'type' => 'datetime',
-                    'timestamp' => true,
-                    'visible' => array('lfs_reward_status', '=', 'redeemed'),
+                    'id'       => 'lfs_reward_redeemed_date',
+                    'name'     => __('Inlöst datum', 'life-freedom-system'),
+                    'type'     => 'datetime',
+                    'js_options' => array(
+                        'dateFormat' => 'yy-mm-dd',
+                        'timeFormat' => 'HH:mm:ss',
+                    ),
+                    'visible' => array(
+                        'when'     => array(array('lfs_reward_status', '=', 'redeemed')),
+                        'relation' => 'and',
+                    ),
                 ),
             ),
         );

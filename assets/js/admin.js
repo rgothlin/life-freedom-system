@@ -1,342 +1,531 @@
 /**
- * Life Freedom System - Admin JavaScript
+ * Admin JavaScript - KOMPLETT VERSION
  * 
  * File location: assets/js/admin.js
+ * Handles all admin interface interactions including reward redemption
  */
 
 (function ($) {
     'use strict';
 
-    // Initialize when document is ready
     $(document).ready(function () {
 
-        // Auto-update total points in activity meta box
-        if ($('#lfs_fp, #lfs_bp, #lfs_sp').length) {
-            updateTotalPoints();
+        // ===============================
+        // DASHBOARD FUNCTIONALITY
+        // ===============================
 
-            $('#lfs_fp, #lfs_bp, #lfs_sp').on('input change', function () {
-                updateTotalPoints();
-            });
-        }
-
-        // Confirm before redeeming reward
-        $('.lfs-redeem-reward-btn').on('click', function (e) {
-            if (!confirm(lfsData.i18n.confirmRedeem || 'Är du säker på att du vill lösa in denna belöning?')) {
-                e.preventDefault();
-                return false;
-            }
-        });
-
-        // Phase selector helper
-        $('#lfs_current_phase').on('change', function () {
-            var phase = $(this).val();
-            var pointsPerKr = 0.5; // default
-
-            switch (phase) {
-                case 'survival':
-                    pointsPerKr = 0.5;
-                    break;
-                case 'stabilizing':
-                    pointsPerKr = 0.8;
-                    break;
-                case 'autonomy':
-                    pointsPerKr = 1.0;
-                    break;
-            }
-
-            if ($('#lfs_points_per_kr').length) {
-                $('#lfs_points_per_kr').val(pointsPerKr);
-            }
-        });
-
-        // Calculate reward account amount based on percentage
-        $('#lfs_reward_account_percent, #lfs_monthly_income').on('input', function () {
-            var income = parseFloat($('#lfs_monthly_income').val()) || 0;
-            var percent = parseFloat($('#lfs_reward_account_percent').val()) || 0;
-            var amount = (income * percent / 100).toFixed(0);
-
-            if ($('.lfs-calculated-reward-amount').length) {
-                $('.lfs-calculated-reward-amount').text(amount.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' kr/månad');
-            }
-        });
-
-        // Streak calculation trigger
-        $('.lfs-calculate-streak').on('click', function (e) {
+        // Quick add activity
+        $('#lfs-quick-add-form').on('submit', function (e) {
             e.preventDefault();
 
-            var $btn = $(this);
-            $btn.prop('disabled', true).text('Beräknar...');
+            const $form = $(this);
+            const $btn = $form.find('button[type="submit"]');
+            const originalText = $btn.html();
 
-            $.post(lfsData.ajaxUrl, {
-                action: 'lfs_calculate_streak',
-                nonce: lfsData.nonce
-            }, function (response) {
-                if (response.success) {
-                    $('.lfs-streak-value').text(response.data.streak);
-                    $btn.prop('disabled', false).text('Uppdatera streak');
-                } else {
-                    alert(lfsData.i18n.error);
-                    $btn.prop('disabled', false).text('Uppdatera streak');
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span> Lägger till...');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'lfs_quick_add_activity',
+                    nonce: lfsData.nonce,
+                    activity_name: $('#lfs-quick-activity-name').val(),
+                    fp: $('#lfs-quick-fp').val(),
+                    bp: $('#lfs-quick-bp').val(),
+                    sp: $('#lfs-quick-sp').val()
+                },
+                success: function (response) {
+                    if (response.success) {
+                        // Update dashboard
+                        updateDashboard(response.data);
+
+                        // Reset form
+                        $form[0].reset();
+
+                        // Show success message
+                        showNotification('✅ Aktivitet tillagd!', 'success');
+                    } else {
+                        showNotification('❌ ' + response.data, 'error');
+                    }
+
+                    $btn.prop('disabled', false).html(originalText);
+                },
+                error: function () {
+                    showNotification('❌ Något gick fel. Försök igen.', 'error');
+                    $btn.prop('disabled', false).html(originalText);
                 }
             });
         });
 
-        // Activity type color coding
-        if ($('.activity_type-checklist').length) {
-            $('.activity_type-checklist input[type="checkbox"]').each(function () {
-                var $label = $(this).parent();
-                var typeName = $label.text().trim().toLowerCase();
+        // Log activity template
+        $('.lfs-log-template-btn').on('click', function () {
+            const $btn = $(this);
+            const templateId = $btn.data('template-id');
+            const originalText = $btn.html();
 
-                if (typeName.includes('deep work')) {
-                    $label.css('color', '#3498db');
-                } else if (typeName.includes('paus')) {
-                    $label.css('color', '#2ecc71');
-                } else if (typeName.includes('träning')) {
-                    $label.css('color', '#e74c3c');
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span> Loggar...');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'lfs_quick_log_template',
+                    nonce: lfsData.nonce,
+                    template_id: templateId
+                },
+                success: function (response) {
+                    if (response.success) {
+                        updateDashboard(response.data);
+                        showNotification('✅ Aktivitet loggad!', 'success');
+                    } else {
+                        showNotification('❌ ' + response.data, 'error');
+                    }
+
+                    $btn.prop('disabled', false).html(originalText);
+                },
+                error: function () {
+                    showNotification('❌ Något gick fel. Försök igen.', 'error');
+                    $btn.prop('disabled', false).html(originalText);
                 }
             });
+        });
+
+        // ===============================
+        // REWARDS FUNCTIONALITY (NEW!)
+        // ===============================
+
+        // Redeem reward button
+        $(document).on('click', '.lfs-redeem-btn', function () {
+            const $btn = $(this);
+            const rewardId = $btn.data('reward-id');
+            const $card = $btn.closest('.lfs-reward-card');
+            const rewardTitle = $card.find('h3').text();
+            const rewardCost = $card.find('.lfs-reward-cost strong').text();
+
+            // Confirmation dialog
+            if (!confirm('🎁 Är du säker på att du vill lösa in "' + rewardTitle + '"?\n\nKostnad: ' + rewardCost)) {
+                return;
+            }
+
+            const originalText = $btn.html();
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span> Löser in...');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'lfs_redeem_reward',
+                    nonce: lfsData.nonce,
+                    reward_id: rewardId
+                },
+                success: function (response) {
+                    if (response.success) {
+                        // Update points and balance in UI
+                        updatePointsDisplay(response.data.current_points, response.data.reward_balance);
+
+                        // Show success message
+                        showNotification('🎉 ' + response.data.message, 'success');
+
+                        // Reload page after short delay to show updated rewards
+                        setTimeout(function () {
+                            location.reload();
+                        }, 1500);
+                    } else {
+                        showNotification('❌ ' + response.data, 'error');
+                        $btn.prop('disabled', false).html(originalText);
+                    }
+                },
+                error: function () {
+                    showNotification('❌ Något gick fel. Försök igen.', 'error');
+                    $btn.prop('disabled', false).html(originalText);
+                }
+            });
+        });
+
+        // ===============================
+        // HELPER FUNCTIONS
+        // ===============================
+
+        /**
+         * Update dashboard with new data
+         */
+        function updateDashboard(data) {
+            if (data.current_points) {
+                $('#lfs-current-fp').text(data.current_points.fp);
+                $('#lfs-current-bp').text(data.current_points.bp);
+                $('#lfs-current-sp').text(data.current_points.sp);
+            }
+
+            if (data.weekly_points) {
+                $('#lfs-weekly-fp').text(data.weekly_points.fp);
+                $('#lfs-weekly-bp').text(data.weekly_points.bp);
+                $('#lfs-weekly-sp').text(data.weekly_points.sp);
+            }
+
+            if (data.reward_balance !== undefined) {
+                $('#lfs-reward-balance').text(numberFormat(data.reward_balance, 0, ',', ' ') + ' kr');
+            }
+
+            // Update progress bars if they exist
+            updateProgressBars(data);
         }
 
-        // Enhanced date picker for activities
-        if ($('#lfs_activity_datetime').length) {
-            var now = new Date();
-            if (!$('#lfs_activity_datetime').val()) {
-                // Set default to current time when creating new activity
-                var timestamp = Math.floor(now.getTime() / 1000);
-                $('#lfs_activity_datetime').val(timestamp);
-            }
+        /**
+         * Update points display (för rewards-sidan)
+         */
+        function updatePointsDisplay(points, balance) {
+            $('#lfs-current-fp').text(points.fp);
+            $('#lfs-current-bp').text(points.bp);
+            $('#lfs-current-sp').text(points.sp);
+            $('#lfs-reward-balance').text(numberFormat(balance, 0, ',', ' ') + ' kr');
         }
 
-        // Dashboard refresh functionality
-        $('.lfs-refresh-dashboard').on('click', function (e) {
-            e.preventDefault();
+        /**
+         * Update progress bars
+         */
+        function updateProgressBars(data) {
+            if (!data.weekly_points || !data.weekly_goals) return;
 
-            $.post(lfsData.ajaxUrl, {
-                action: 'lfs_get_dashboard_data',
-                nonce: lfsData.nonce
-            }, function (response) {
-                if (response.success) {
-                    location.reload();
-                }
-            });
-        });
+            // FP Progress
+            const fpProgress = (data.weekly_points.fp / data.weekly_goals.fp) * 100;
+            $('.lfs-progress-bar.lfs-fp-bar .lfs-progress-fill').css('width', Math.min(fpProgress, 100) + '%');
 
-        // Export functionality (placeholder for future feature)
-        $('.lfs-export-data').on('click', function (e) {
-            e.preventDefault();
-            alert('Export-funktionalitet kommer snart!');
-        });
+            // BP Progress
+            const bpProgress = (data.weekly_points.bp / data.weekly_goals.bp) * 100;
+            $('.lfs-progress-bar.lfs-bp-bar .lfs-progress-fill').css('width', Math.min(bpProgress, 100) + '%');
 
-        // Keyboard shortcuts
-        $(document).on('keydown', function (e) {
-            // Ctrl/Cmd + K = Quick add activity
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-                e.preventDefault();
-                if ($('#lfsCustomTitle').length) {
-                    $('#lfsCustomTitle').focus();
-                }
+            // SP Progress
+            const spProgress = (data.weekly_points.sp / data.weekly_goals.sp) * 100;
+            $('.lfs-progress-bar.lfs-sp-bar .lfs-progress-fill').css('width', Math.min(spProgress, 100) + '%');
+        }
+
+        /**
+         * Show notification message
+         */
+        function showNotification(message, type) {
+            // Remove existing notifications
+            $('.lfs-notification').remove();
+
+            const $notification = $('<div class="lfs-notification lfs-notification-' + type + '">' + message + '</div>');
+            $('body').append($notification);
+
+            // Show notification
+            setTimeout(function () {
+                $notification.addClass('lfs-notification-show');
+            }, 10);
+
+            // Hide after 3 seconds
+            setTimeout(function () {
+                $notification.removeClass('lfs-notification-show');
+                setTimeout(function () {
+                    $notification.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        /**
+         * Number formatting helper
+         */
+        function numberFormat(number, decimals, decPoint, thousandsSep) {
+            number = (number + '').replace(/[^0-9+\-Ee.]/g, '');
+            var n = !isFinite(+number) ? 0 : +number;
+            var prec = !isFinite(+decimals) ? 0 : Math.abs(decimals);
+            var sep = (typeof thousandsSep === 'undefined') ? ',' : thousandsSep;
+            var dec = (typeof decPoint === 'undefined') ? '.' : decPoint;
+            var s = '';
+
+            var toFixedFix = function (n, prec) {
+                var k = Math.pow(10, prec);
+                return '' + (Math.round(n * k) / k);
+            };
+
+            s = (prec ? toFixedFix(n, prec) : '' + Math.round(n)).split('.');
+
+            if (s[0].length > 3) {
+                s[0] = s[0].replace(/\B(?=(?:\d{3})+(?!\d))/g, sep);
             }
-        });
 
-        // Notification when points reach milestones
-        checkPointMilestones();
+            if ((s[1] || '').length < prec) {
+                s[1] = s[1] || '';
+                s[1] += new Array(prec - s[1].length + 1).join('0');
+            }
 
-        // Auto-save draft activities (every 30 seconds)
-        if ($('#post-type-life_activity').length) {
+            return s.join(dec);
+        }
+
+        // ===============================
+        // DASHBOARD AUTO-REFRESH
+        // ===============================
+
+        /**
+         * Auto-refresh dashboard data every 30 seconds
+         */
+        if ($('.lfs-dashboard').length) {
             setInterval(function () {
-                if ($('#save-post').length && !$('#save-post').prop('disabled')) {
-                    $('#save-post').click();
+                refreshDashboard();
+            }, 30000); // 30 seconds
+        }
+
+        function refreshDashboard() {
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'lfs_get_dashboard_data',
+                    nonce: lfsData.nonce
+                },
+                success: function (response) {
+                    if (response.success) {
+                        updateDashboard(response.data);
+                    }
                 }
-            }, 30000);
+            });
         }
 
-        // Tooltips
-        $('[data-lfs-tooltip]').each(function () {
-            $(this).attr('title', $(this).data('lfs-tooltip'));
-        });
+        // ===============================
+        // CHARTS (if Chart.js is loaded)
+        // ===============================
 
-    }); // End document ready
-
-    /**
-     * Update total points display
-     */
-    function updateTotalPoints() {
-        var fp = parseInt($('#lfs_fp').val()) || 0;
-        var bp = parseInt($('#lfs_bp').val()) || 0;
-        var sp = parseInt($('#lfs_sp').val()) || 0;
-        var total = fp + bp + sp;
-
-        if ($('.lfs-total-value').length) {
-            $('.lfs-total-value').text(total);
+        /**
+         * Initialize charts on dashboard
+         */
+        if (typeof Chart !== 'undefined' && $('.lfs-chart-canvas').length) {
+            initializeCharts();
         }
 
-        // Color code based on total
-        var $totalDisplay = $('.lfs-total-points');
-        $totalDisplay.removeClass('lfs-low lfs-medium lfs-high');
+        function initializeCharts() {
+            // Weekly Progress Chart
+            const weeklyChartCanvas = document.getElementById('lfs-weekly-chart');
+            if (weeklyChartCanvas) {
+                const weeklyData = lfsData.weekly_data || [];
 
-        if (total < 50) {
-            $totalDisplay.addClass('lfs-low');
-        } else if (total < 100) {
-            $totalDisplay.addClass('lfs-medium');
-        } else {
-            $totalDisplay.addClass('lfs-high');
-        }
-    }
-
-    /**
-     * Check if user has reached point milestones
-     */
-    function checkPointMilestones() {
-        $.post(lfsData.ajaxUrl, {
-            action: 'lfs_get_current_points',
-            nonce: lfsData.nonce
-        }, function (response) {
-            if (response.success) {
-                var points = response.data;
-
-                // Check for milestone achievements
-                var milestones = [
-                    { value: 1000, name: '1000 totalt poäng' },
-                    { value: 5000, name: '5000 totalt poäng' },
-                    { value: 10000, name: '10000 totalt poäng' },
-                    { value: 500, type: 'fp', name: '500 FP' },
-                    { value: 1000, type: 'fp', name: '1000 FP' },
-                    { value: 500, type: 'bp', name: '500 BP' },
-                    { value: 500, type: 'sp', name: '500 SP' }
-                ];
-
-                milestones.forEach(function (milestone) {
-                    var currentValue = milestone.type ? points[milestone.type] : points.total;
-                    var storageKey = 'lfs_milestone_' + milestone.name.replace(/\s+/g, '_');
-
-                    if (currentValue >= milestone.value && !localStorage.getItem(storageKey)) {
-                        showMilestoneNotification(milestone.name);
-                        localStorage.setItem(storageKey, 'achieved');
+                new Chart(weeklyChartCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: weeklyData.labels || [],
+                        datasets: [
+                            {
+                                label: 'FP',
+                                data: weeklyData.fp || [],
+                                borderColor: '#e74c3c',
+                                backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                                tension: 0.4
+                            },
+                            {
+                                label: 'BP',
+                                data: weeklyData.bp || [],
+                                borderColor: '#3498db',
+                                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                                tension: 0.4
+                            },
+                            {
+                                label: 'SP',
+                                data: weeklyData.sp || [],
+                                borderColor: '#2ecc71',
+                                backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                                tension: 0.4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
                     }
                 });
             }
+        }
+
+        // ===============================
+        // FINANCIAL PAGE
+        // ===============================
+
+        /**
+         * Handle account balance updates
+         */
+        $('.lfs-update-balance-btn').on('click', function () {
+            const $btn = $(this);
+            const accountType = $btn.data('account-type');
+            const $input = $('input[name="lfs_' + accountType + '_balance"]');
+            const newBalance = $input.val();
+
+            if (!newBalance) {
+                showNotification('❌ Ange ett belopp', 'error');
+                return;
+            }
+
+            const originalText = $btn.html();
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span>');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'lfs_update_account_balance',
+                    nonce: lfsData.nonce,
+                    account_type: accountType,
+                    balance: newBalance
+                },
+                success: function (response) {
+                    if (response.success) {
+                        showNotification('✅ Balans uppdaterad!', 'success');
+
+                        // Update display
+                        $('.lfs-' + accountType + '-balance').text(numberFormat(parseFloat(newBalance), 0, ',', ' ') + ' kr');
+                    } else {
+                        showNotification('❌ ' + response.data, 'error');
+                    }
+
+                    $btn.prop('disabled', false).html(originalText);
+                },
+                error: function () {
+                    showNotification('❌ Något gick fel. Försök igen.', 'error');
+                    $btn.prop('disabled', false).html(originalText);
+                }
+            });
         });
-    }
 
-    /**
-     * Show milestone notification
-     */
-    function showMilestoneNotification(milestoneName) {
-        var $notification = $('<div class="lfs-milestone-notification">')
-            .html('<span class="dashicons dashicons-awards"></span> <strong>Grattis!</strong> Du har nått: ' + milestoneName + ' 🎉')
-            .hide()
-            .appendTo('body')
-            .fadeIn(500);
+        // ===============================
+        // SETTINGS PAGE
+        // ===============================
 
-        setTimeout(function () {
-            $notification.fadeOut(500, function () {
-                $(this).remove();
+        /**
+         * Update settings with live preview
+         */
+        $('input[name^="lfs_weekly_"], select[name="lfs_life_phase"]').on('change', function () {
+            const $field = $(this);
+            const fieldName = $field.attr('name');
+            const fieldValue = $field.val();
+
+            // Show saving indicator
+            const $indicator = $('<span class="lfs-saving-indicator"> Sparar...</span>');
+            $field.after($indicator);
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'lfs_update_setting',
+                    nonce: lfsData.nonce,
+                    setting_name: fieldName,
+                    setting_value: fieldValue
+                },
+                success: function (response) {
+                    if (response.success) {
+                        $indicator.text(' ✓ Sparat!').addClass('lfs-saved');
+                        setTimeout(function () {
+                            $indicator.fadeOut(function () {
+                                $(this).remove();
+                            });
+                        }, 2000);
+                    } else {
+                        $indicator.text(' ✗ Fel!').addClass('lfs-error');
+                    }
+                },
+                error: function () {
+                    $indicator.text(' ✗ Fel!').addClass('lfs-error');
+                }
             });
-        }, 5000);
-    }
+        });
 
-    /**
-     * Format number with spaces
-     */
-    function formatNumber(num) {
-        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-    }
-
-    /**
-     * Show loading spinner
-     */
-    function showLoading($element) {
-        $element.append('<span class="spinner is-active" style="float: none; margin: 0 10px;"></span>');
-    }
-
-    /**
-     * Hide loading spinner
-     */
-    function hideLoading($element) {
-        $element.find('.spinner').remove();
-    }
-
-    /**
-     * Show success message
-     */
-    function showSuccess(message) {
-        var $notice = $('<div class="notice notice-success is-dismissible"><p>' + message + '</p></div>');
-        $('.wrap h1').after($notice);
-
-        setTimeout(function () {
-            $notice.fadeOut(function () {
-                $(this).remove();
-            });
-        }, 3000);
-    }
-
-    /**
-     * Show error message
-     */
-    function showError(message) {
-        var $notice = $('<div class="notice notice-error is-dismissible"><p>' + message + '</p></div>');
-        $('.wrap h1').after($notice);
-    }
-
-    // Make functions globally accessible
-    window.lfsShowSuccess = showSuccess;
-    window.lfsShowError = showError;
-    window.lfsFormatNumber = formatNumber;
+    });
 
 })(jQuery);
 
-// CSS for milestone notifications
-jQuery(document).ready(function ($) {
-    if (!$('#lfs-milestone-notification-styles').length) {
-        $('head').append(`
-            <style id="lfs-milestone-notification-styles">
-                .lfs-milestone-notification {
-                    position: fixed;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 30px 50px;
-                    border-radius: 12px;
-                    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-                    z-index: 999999;
-                    font-size: 18px;
-                    text-align: center;
-                    animation: lfsSlideIn 0.5s ease-out;
-                }
-                
-                .lfs-milestone-notification .dashicons {
-                    font-size: 32px;
-                    width: 32px;
-                    height: 32px;
-                    vertical-align: middle;
-                    margin-right: 10px;
-                }
-                
-                @keyframes lfsSlideIn {
-                    from {
-                        transform: translate(-50%, -60%);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translate(-50%, -50%);
-                        opacity: 1;
-                    }
-                }
-                
-                .lfs-total-points.lfs-low {
-                    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-                }
-                
-                .lfs-total-points.lfs-medium {
-                    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
-                }
-                
-                .lfs-total-points.lfs-high {
-                    background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
-                }
-            </style>
-        `);
-    }
+/**
+ * Add CSS for notifications and other UI elements
+ */
+document.addEventListener('DOMContentLoaded', function () {
+    const style = document.createElement('style');
+    style.textContent = `
+        /* Notifications */
+        .lfs-notification {
+            position: fixed;
+            top: 32px;
+            right: 20px;
+            background: #fff;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 999999;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            font-size: 14px;
+            font-weight: 600;
+            max-width: 350px;
+        }
+        
+        .lfs-notification-show {
+            transform: translateX(0);
+        }
+        
+        .lfs-notification-success {
+            border-left: 4px solid #2ecc71;
+            color: #27ae60;
+        }
+        
+        .lfs-notification-error {
+            border-left: 4px solid #e74c3c;
+            color: #c0392b;
+        }
+        
+        .lfs-notification-info {
+            border-left: 4px solid #3498db;
+            color: #2980b9;
+        }
+        
+        /* Spin animation */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+        
+        /* Saving indicator */
+        .lfs-saving-indicator {
+            margin-left: 10px;
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+        
+        .lfs-saving-indicator.lfs-saved {
+            color: #2ecc71;
+        }
+        
+        .lfs-saving-indicator.lfs-error {
+            color: #e74c3c;
+        }
+        
+        /* Button loading state */
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        /* Smooth transitions */
+        .lfs-point-value,
+        .lfs-balance-amount {
+            transition: all 0.3s ease;
+        }
+        
+        .lfs-point-value.updating,
+        .lfs-balance-amount.updating {
+            color: #3498db;
+            transform: scale(1.1);
+        }
+    `;
+    document.head.appendChild(style);
 });
