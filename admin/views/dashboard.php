@@ -139,6 +139,8 @@ $templates = $template_manager->get_templates();
                 <canvas id="lfsActivityTypesChart" width="400" height="250"></canvas>
             </div>
             
+            <?php include LFS_PLUGIN_DIR . 'admin/views/widgets/milestone-progress.php'; ?>
+
         </div>
         
         <!-- Right Column -->

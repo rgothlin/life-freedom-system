@@ -54,6 +54,9 @@ class LFS_Meta_Boxes {
         $meta_boxes[] = $this->settings_current_status_meta_box();
         $meta_boxes[] = $this->settings_goals_meta_box();
         $meta_boxes[] = $this->settings_economic_meta_box();
+
+        // Inside register_meta_boxes() method, add:
+        $meta_boxes[] = $this->recurring_transaction_meta_box();
         
         return $meta_boxes;
     }
@@ -455,6 +458,34 @@ class LFS_Meta_Boxes {
                 array(
                     'type' => 'divider',
                 ),
+
+                array(
+                    'type' => 'divider',
+                ),
+                array(
+                    'type' => 'heading',
+                    'name' => __('Milstolpe-krav', 'life-freedom-system'),
+                ),
+                array(
+                    'id'   => 'lfs_reward_requires_milestone',
+                    'name' => __('Kräver milstolpe?', 'life-freedom-system'),
+                    'desc' => __('Om aktiverad låses belöningen tills vald milstolpe är klar', 'life-freedom-system'),
+                    'type' => 'checkbox',
+                    'std'  => 0,
+                ),
+                array(
+                    'id' => 'lfs_reward_milestone',
+                    'name' => __('Vilken milstolpe?', 'life-freedom-system'),
+                    'type' => 'post',
+                    'post_type' => 'lfs_milestone',
+                    'field_type' => 'select_advanced',
+                    'placeholder' => __('Välj milstolpe', 'life-freedom-system'),
+                    'desc' => __('Belöningen låses upp först när denna milstolpe är markerad som "Klar"', 'life-freedom-system'),
+                    'visible' => array(
+                        'when'     => array(array('lfs_reward_requires_milestone', '=', '1')),
+                        'relation' => 'and',
+                    ),
+                ),
                 
                 // Status
                 array(
@@ -554,6 +585,164 @@ class LFS_Meta_Boxes {
                         'transfer' => __('Överföring', 'life-freedom-system'),
                         'savings' => __('Sparande', 'life-freedom-system'),
                     ),
+                ),
+            ),
+        );
+    }
+
+    /**
+     * Recurring Transaction Meta Box
+     */
+    private function recurring_transaction_meta_box() {
+        return array(
+            'title' => __('Återkommande transaktion - Detaljer', 'life-freedom-system'),
+            'id' => 'recurring_transaction_details',
+            'post_types' => array('lfs_recurring_trans'),
+            'context' => 'normal',
+            'tabs' => array(
+                'basic' => __('Grundläggande', 'life-freedom-system'),
+                'schedule' => __('Schema', 'life-freedom-system'),
+                'status' => __('Status', 'life-freedom-system'),
+            ),
+            'tab_style' => 'left',
+            'fields' => array(
+                
+                // BASIC TAB
+                array(
+                    'tab' => 'basic',
+                    'name' => __('Belopp (kr)', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_amount',
+                    'type' => 'number',
+                    'min' => 0,
+                    'step' => 1,
+                    'prepend' => 'kr',
+                    'required' => true,
+                    'desc' => __('Hur mycket ska betalas varje gång?', 'life-freedom-system'),
+                ),
+                
+                array(
+                    'tab' => 'basic',
+                    'name' => __('Kategori', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_category',
+                    'type' => 'select',
+                    'options' => array(
+                        'expense' => __('Utgift', 'life-freedom-system'),
+                        'transfer' => __('Överföring', 'life-freedom-system'),
+                        'savings' => __('Sparande', 'life-freedom-system'),
+                        'income' => __('Inkomst', 'life-freedom-system'),
+                    ),
+                    'std' => 'expense',
+                    'required' => true,
+                ),
+                
+                array(
+                    'tab' => 'basic',
+                    'name' => __('Från konto', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_from_account',
+                    'type' => 'taxonomy_advanced',
+                    'taxonomy' => 'lfs_account',
+                    'field_type' => 'select_advanced',
+                    'required' => true,
+                    'desc' => __('Vilket konto ska pengarna tas från?', 'life-freedom-system'),
+                ),
+                
+                array(
+                    'tab' => 'basic',
+                    'name' => __('Till konto', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_to_account',
+                    'type' => 'taxonomy_advanced',
+                    'taxonomy' => 'lfs_account',
+                    'field_type' => 'select_advanced',
+                    'desc' => __('Vilket konto ska pengarna till? (Valfritt, lämna tomt för utgifter)', 'life-freedom-system'),
+                ),
+                
+                // SCHEDULE TAB
+                array(
+                    'tab' => 'schedule',
+                    'name' => __('Frekvens', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_frequency',
+                    'type' => 'select',
+                    'options' => array(
+                        'weekly' => __('Veckovis', 'life-freedom-system'),
+                        'monthly' => __('Månadsvis', 'life-freedom-system'),
+                        'quarterly' => __('Kvartalsvis', 'life-freedom-system'),
+                        'yearly' => __('Årsvis', 'life-freedom-system'),
+                        'custom' => __('Anpassad', 'life-freedom-system'),
+                    ),
+                    'std' => 'monthly',
+                    'required' => true,
+                    'desc' => __('Hur ofta ska transaktionen upprepas?', 'life-freedom-system'),
+                ),
+                
+                array(
+                    'tab' => 'schedule',
+                    'name' => __('Anpassat intervall (dagar)', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_custom_interval',
+                    'type' => 'number',
+                    'min' => 1,
+                    'step' => 1,
+                    'desc' => __('Antal dagar mellan varje transaktion (endast för anpassad frekvens)', 'life-freedom-system'),
+                    'visible' => array(
+                        'when' => array(array('lfs_recurring_frequency', '=', 'custom')),
+                        'relation' => 'and',
+                    ),
+                ),
+                
+                array(
+                    'tab' => 'schedule',
+                    'name' => __('Startdatum', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_start_date',
+                    'type' => 'date',
+                    'js_options' => array(
+                        'dateFormat' => 'yy-mm-dd',
+                    ),
+                    'std' => date('Y-m-d'),
+                    'required' => true,
+                    'desc' => __('När ska första transaktionen skapas?', 'life-freedom-system'),
+                ),
+                
+                array(
+                    'tab' => 'schedule',
+                    'name' => __('Nästa förfallodag', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_next_due',
+                    'type' => 'date',
+                    'js_options' => array(
+                        'dateFormat' => 'yy-mm-dd',
+                    ),
+                    'readonly' => true,
+                    'desc' => __('Beräknas automatiskt', 'life-freedom-system'),
+                ),
+                
+                // STATUS TAB
+                array(
+                    'tab' => 'status',
+                    'name' => __('Aktiv', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_active',
+                    'type' => 'switch',
+                    'style' => 'rounded',
+                    'on_label' => __('Aktiv', 'life-freedom-system'),
+                    'off_label' => __('Pausad', 'life-freedom-system'),
+                    'std' => '1',
+                    'desc' => __('Pausa transaktionen temporärt utan att ta bort den', 'life-freedom-system'),
+                ),
+                
+                array(
+                    'tab' => 'status',
+                    'name' => __('Antal genererade transaktioner', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_generated_count',
+                    'type' => 'number',
+                    'readonly' => true,
+                    'std' => 0,
+                    'desc' => __('Hur många gånger har denna transaktion körts?', 'life-freedom-system'),
+                ),
+                
+                array(
+                    'tab' => 'status',
+                    'name' => __('Senast genererad', 'life-freedom-system'),
+                    'id' => 'lfs_recurring_last_generated',
+                    'type' => 'datetime',
+                    'readonly' => true,
+                    'desc' => __('När skapades den senaste transaktionen?', 'life-freedom-system'),
                 ),
             ),
         );
@@ -685,6 +874,19 @@ class LFS_Meta_Boxes {
             'context' => 'normal',
             'fields' => array(
                 array(
+                    'name' => __('Kopplat projekt', 'life-freedom-system'),
+                    'id' => 'lfs_milestone_project',
+                    'type' => 'post',
+                    'post_type' => 'lfs_project',
+                    'field_type' => 'select_advanced',
+                    'placeholder' => __('Välj projekt', 'life-freedom-system'),
+                    'required' => true,
+                    'desc' => __('Vilket projekt tillhör denna milstolpe?', 'life-freedom-system'),
+                ),
+                array(
+                    'type' => 'divider',
+                ),
+                array(
                     'name' => __('Milstolpstyp', 'life-freedom-system'),
                     'id' => 'lfs_milestone_type',
                     'type' => 'select',
@@ -738,10 +940,21 @@ class LFS_Meta_Boxes {
                     'id' => 'lfs_milestone_status',
                     'type' => 'select',
                     'options' => array(
+                        'upcoming' => __('Kommande', 'life-freedom-system'),
                         'active' => __('Pågående', 'life-freedom-system'),
-                        'achieved' => __('Uppnådd', 'life-freedom-system'),
+                        'completed' => __('Klar', 'life-freedom-system'),
+                        'blocked' => __('Blockerad', 'life-freedom-system'),
                     ),
-                    'std' => 'active',
+                    'std' => 'upcoming',
+                ),
+                array(
+                    'name' => __('Deadline', 'life-freedom-system'),
+                    'id' => 'lfs_milestone_deadline',
+                    'type' => 'date',
+                    'js_options' => array(
+                        'dateFormat' => 'yy-mm-dd',
+                    ),
+                    'desc' => __('När ska milstolpen vara klar?', 'life-freedom-system'),
                 ),
                 array(
                     'name' => __('Datum uppnådd', 'life-freedom-system'),

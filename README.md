@@ -1,378 +1,369 @@
-# Life Freedom System - WordPress Plugin
-
-Ett holistiskt poäng- och belöningssystem för att uppnå frihet och autonomi i livet.
-
-## 📋 Innehållsförteckning
-
-- [Om pluginen](#om-pluginen)
-- [Funktioner](#funktioner)
-- [Installation](#installation)
-- [Mappstruktur](#mappstruktur)
-- [Konfiguration](#konfiguration)
-- [Användning](#användning)
-- [Support](#support)
-
-## 🎯 Om pluginen
-
-Life Freedom System är ett WordPress-plugin som hjälper dig att:
-- Spåra och belöna aktiviteter som driver dig mot dina mål
-- Balansera arbete, egna projekt, träning och relationer
-- Hantera din ekonomi och bygga stabilitet
-- Gå från heltidsjobb till egen företagare med autonomi
-
-## ✨ Funktioner
-
-### Poängsystem
-- **Freedom Points (FP)** - För aktiviteter som driver företagande och autonomi
-- **Balance Points (BP)** - För aktiviteter som håller dig frisk och närvarande
-- **Stability Points (SP)** - För aktiviteter som bygger ekonomisk trygghet
-
-### Custom Post Types
-- **Aktiviteter** - Spåra alla dina dagliga aktiviteter
-- **Projekt** - Hantera dina egna projekt och företag
-- **Belöningar** - Definiera och lös in belöningar
-- **Transaktioner** - Ekonomisk spårning
-- **Milstolpar** - Sätt och uppnå stora mål
-
-### Dashboard
-- Översikt över alla poäng och progress
-- Interaktiva grafer med Chart.js
-- Snabbloggning av aktiviteter
-- Veckomål och streak-spårning
-- Tillgängliga belöningar
-
-### Ekonomi
-- Kontostatus för alla dina konton
-- Månadsöversikter
-- Läckage-detektering (när du bryter budgeten)
-- Automatisk SP-beräkning från ekonomiska händelser
-
-### Belöningar
-- Gratis och ekonomiska belöningar
-- Nivåbaserat system (Nivå 0-4)
-- Poängkrav för varje belöning
-- Historik över inlösta belöningar
-
-## 🚀 Installation
-
-### Förutsättningar
-- WordPress 5.8 eller senare
-- PHP 7.4 eller senare
-- **MetaBox.io plugin** (obligatoriskt!)
-  - Du måste ha MetaBox + alla extensions installerade
-  - Ladda ner från: https://metabox.io
-
-### Steg-för-steg installation
-
-1. **Skapa plugin-mappen:**
-   ```bash
-   cd wp-content/plugins/
-   mkdir life-freedom-system
-   cd life-freedom-system
-   ```
-
-2. **Skapa mappstrukturen:**
-   ```
-   life-freedom-system/
-   ├── life-freedom-system.php
-   ├── includes/
-   │   ├── class-lfs-meta-boxes.php
-   │   ├── class-lfs-calculations.php
-   │   ├── class-lfs-dashboard.php
-   │   ├── class-lfs-rewards.php
-   │   └── class-lfs-financial.php
-   ├── admin/
-   │   └── views/
-   │       ├── dashboard.php
-   │       ├── rewards.php
-   │       ├── financial.php
-   │       └── settings.php
-   ├── assets/
-   │   ├── css/
-   │   │   ├── admin.css
-   │   │   └── frontend.css
-   │   └── js/
-   │       ├── admin.js
-   │       └── frontend.js
-   └── languages/
-   ```
-
-3. **Kopiera alla filer till rätt platser enligt strukturen ovan**
-
-4. **Installera MetaBox.io:**
-   - Gå till WordPress Admin → Plugins → Add New
-   - Sök efter "Meta Box"
-   - Installera och aktivera Meta Box + alla tillgängliga extensions
-
-5. **Aktivera pluginen:**
-   - Gå till WordPress Admin → Plugins
-   - Hitta "Life Freedom System"
-   - Klicka på "Activate"
-
-6. **Kontrollera att allt fungerar:**
-   - Du ska nu se "Freedom System" i WordPress admin-menyn
-   - Klicka på det för att komma till dashboarden
-
-## 📁 Mappstruktur
-
-```
-life-freedom-system/
-│
-├── life-freedom-system.php          # Huvudfil - registrerar allt
-│
-├── includes/                         # Kärnfunktionalitet
-│   ├── class-lfs-meta-boxes.php    # MetaBox konfigurationer
-│   ├── class-lfs-calculations.php  # Poängberäkningar
-│   ├── class-lfs-dashboard.php     # Dashboard logik
-│   ├── class-lfs-rewards.php       # Belöningssystem
-│   └── class-lfs-financial.php     # Ekonomisk spårning
-│
-├── admin/                            # Admin-gränssnitt
-│   └── views/
-│       ├── dashboard.php            # Dashboard-vy
-│       ├── rewards.php              # Belöningssida
-│       ├── financial.php            # Ekonomisida
-│       └── settings.php             # Inställningar
-│
-├── assets/                           # CSS och JavaScript
-│   ├── css/
-│   │   ├── admin.css               # Admin-styling
-│   │   └── frontend.css            # Frontend-styling
-│   └── js/
-│       ├── admin.js                # Admin JavaScript
-│       └── frontend.js             # Frontend JavaScript
-│
-└── languages/                        # Översättningar (framtida)
-```
-
-## ⚙️ Konfiguration
-
-### Första gången du använder pluginen
-
-1. **Gå till Settings:**
-   - Freedom System → Inställningar
-
-2. **Välj din livsfas:**
-   - **Survival** - Du har fortfarande heltidsjobb och kämpar ekonomiskt
-   - **Stabilisering** - Egna projekt börjar ge inkomst
-   - **Autonomi** - Du har lämnat heltidsjobbet och är självständig
-
-3. **Sätt dina veckomål:**
-   - FP-mål: 400-600 per vecka
-   - BP-mål: 250-400 per vecka
-   - SP-mål: 300-500 per vecka
-
-4. **Konfigurera ekonomi:**
-   - Ange din månadsinkomst
-   - Sätt belöningskonto-procent (2-10% beroende på fas)
-
-### Skapa standardaktiviteter
-
-Du kan skapa fördefinierade aktiviteter som templates. Exempel:
-
-**Deep Work (Eget projekt):**
-- FP: 70
-- Kategori: Arbete
-- Typ: Deep Work
-- Kontext: Eget projekt
-
-**Träning:**
-- BP: 35
-- Kategori: Träning
-- Typ: Träning
-
-**Arbetat hemifrån:**
-- SP: 40
-- Kategori: Arbete
-- Kontext: Heltidsjobb
-
-### Skapa dina konton
-
-Gå till Transaktioner → Konton och skapa:
-- Hyra & Fasta utgifter
-- Mat & Hem
-- Elias Vardagspott
-- Oförutsett
-- Sparande & Investering
-- Resor & Semester
-- Belöningskonto
-
-### Skapa belöningar
-
-Exempel på belöningar att skapa:
-
-**Nivå 0 - Gratis (0-50 poäng):**
-- Gaming session guilt-free (30 BP)
-- Netflix-kväll (40 BP)
-- Siesta (25 BP)
-
-**Nivå 1 - Daglig (50-100 kr, 50-100 poäng):**
-- Fika på café (60 poäng, 50 kr)
-- Godis (40 poäng, 30 kr)
-- Sätt över 50 kr till belöningskonto (50 poäng)
-
-**Nivå 2 - Vecka (100-300 kr, 150-300 poäng):**
-- Middag ute (200 poäng, 250 kr)
-- Ny bok (150 poäng, 150 kr)
-
-**Nivå 3 - Månad (500-2000 kr, 400-800 poäng):**
-- Dagsutflykt (500 poäng, 800 kr)
-- Massage (600 poäng, 600 kr)
-
-**Nivå 4 - Milstolpe (2000+ kr):**
-- Baseras på specifika milstolpar
-
-## 📖 Användning
-
-### Daglig användning
-
-1. **Morgon:**
-   - Öppna dashboarden
-   - Se dina veckomål
-   - Planera dagen
-
-2. **Under dagen:**
-   - Logga aktiviteter direkt när du gör dem
-   - Använd snabbloggning för vanliga aktiviteter
-   - Eller lägg till manuellt via Aktiviteter → Add New
-
-3. **Kväll:**
-   - Gör en daglig avstämning
-   - Se vad du uppnått
-   - Planera nästa dag
-
-### Veckovis
-
-1. **Söndag kväll/Måndag morgon:**
-   - Granska veckan som gick
-   - Kontrollera om du nådde dina mål
-   - Lös in eventuella belöningar
-   - Sätt mål för kommande vecka
-
-### Månadsvis
-
-1. **Månadsskifte:**
-   - Gå till Ekonomi-sidan
-   - Granska månadsöversikt
-   - Kontrollera om budget följts
-   - Uppdatera kontosaldon
-   - Fira om inga läckor!
-
-### Tips för framgång
-
-- **Var konsekvent** - Logga aktiviteter varje dag
-- **Var ärlig** - Ge rätt poäng för aktiviteter
-- **Balansera** - Se till att få både FP, BP och SP
-- **Fira framsteg** - Lös in belöningar när du förtjänat dem
-- **Justera** - Anpassa systemet efter dina behov
-
-## 🔧 Felsökning
-
-### Pluginen aktiveras inte
-- Kontrollera att MetaBox.io är installerat och aktiverat
-- Kontrollera PHP-version (minst 7.4)
-- Kontrollera WordPress-version (minst 5.8)
-
-### Dashboarden visar inga grafer
-- Kontrollera att Chart.js laddas (öppna browser console)
-- Töm cache
-- Kontrollera att du har aktiviteter med datum
-
-### Poäng uppdateras inte
-- Kontrollera att aktiviteten är Published (inte Draft)
-- Kontrollera att datum är satt
-- Försök spara aktiviteten igen
-
-### MetaBox fält visas inte
-- Kontrollera att alla MetaBox extensions är aktiverade
-- Gå till Settings → Meta Box → Tilllägg
-- Aktivera alla tillgängliga extensions
-
-## 🎨 Anpassning
-
-### Ändra färger
-
-Redigera `assets/css/admin.css`:
-
-```css
-/* FP färg */
-.lfs-card-fp .lfs-points-number {
-    color: #3498db; /* Ändra här */
-}
-
-/* BP färg */
-.lfs-card-bp .lfs-points-number {
-    color: #2ecc71; /* Ändra här */
-}
-
-/* SP färg */
-.lfs-card-sp .lfs-points-number {
-    color: #f39c12; /* Ändra här */
-}
-```
-
-### Lägga till egna poängtyper
-
-1. Redigera `includes/class-lfs-meta-boxes.php`
-2. Lägg till nytt fält i `activity_points_meta_box()`
-3. Uppdatera `class-lfs-calculations.php` för beräkningar
-
-### Lägga till egna aktivitetsmallar
-
-Redigera `includes/class-lfs-dashboard.php` i metoden `get_activity_templates()`:
-
-```php
-array(
-    'name' => __('Min egen aktivitet', 'life-freedom-system'),
-    'fp' => 50,
-    'bp' => 20,
-    'sp' => 10,
-    'category' => 'Min kategori',
-    'type' => 'Min typ',
-    'context' => 'Min kontext',
-),
-```
-
-## 🐛 Kända problem
-
-- Inga kända buggar för tillfället
-
-## 🔮 Framtida funktioner
-
-- [ ] Export till CSV/Excel
-- [ ] Email-rapporter
-- [ ] Mobile app
-- [ ] API för externa integrationer
-- [ ] Mer avancerade statistik
-- [ ] Team/familje-funktioner
-- [ ] Gamification (badges, achievements)
-
-## 📝 Changelog
-
-### Version 1.0.0 (2025-10-16)
-- Första release
-- Alla grundläggande funktioner
-- Dashboard med Chart.js
-- Belöningssystem
-- Ekonomisk spårning
-- MetaBox integration
-
-## 👨‍💻 Support
-
-För support eller frågor:
-- Öppna en issue på GitHub
-- Kontakta plugin-utvecklaren
-
-## 📄 Licens
-
-GPL v2 or later
-
-## 🙏 Tack till
-
-- MetaBox.io för det fantastiska meta box-ramverket
-- Chart.js för grafbiblioteket
-- WordPress-communityn
+# 🎁 LIFE FREEDOM SYSTEM - DUAL-LOCK BELÖNINGSSYSTEM
+## Uppdateringspaket v2.0
+
+**Skapad:** 2025-01-16  
+**För:** Rickard @ Tipping Point  
+**Av:** Claude (AI Assistent)
 
 ---
 
-**Byggd med ❤️ för att hjälpa dig uppnå frihet och autonomi**
+## 📦 PAKETINNEHÅLL
+
+Detta paket innehåller alla filer du behöver för att uppgradera ditt Life Freedom System med det nya Dual-Lock belöningssystemet.
+
+### 📄 Filer som ingår:
+
+#### 1. **SNABBSAMMANFATTNING.md** ⚡ START HÄR!
+Läs denna först! En snabb översikt av:
+- Vad problemet är
+- Vad lösningen gör
+- Hur du installerar det
+- Snabbtest
+
+#### 2. **DUAL_LOCK_IMPLEMENTATION_GUIDE.md** 📚 DETALJERAD GUIDE
+Komplett implementeringsguide med:
+- Teknisk förklaring av Dual-Lock systemet
+- Steg-för-steg installationsinstruktioner
+- CSS och JavaScript som behöver läggas till
+- Dataflödesdiagram
+- Felsökningsguide
+- Framtida förbättringar
+
+#### 3. **class-lfs-rewards-UPDATED.php** 💻 HUVUDFIL
+Uppdaterad rewards-klass med:
+- Dual-lock logik
+- Nya metoder för att kolla faktiska pengar
+- Beräkning av rekommenderad överföring
+- Säkerhetskontroller vid inlösen
+- Nya AJAX-handlers
+
+**Installation:**
+```
+Byt ut: wp-content/plugins/life-freedom-system/includes/class-lfs-rewards.php
+```
+
+#### 4. **class-lfs-financial-UPDATED.php** 💰 HJÄLPFIL
+Uppdaterad financial-klass med:
+- Ny metod: `get_account_balance($account_name)`
+- Möjliggör att hämta specifikt kontos saldo
+
+**Installation:**
+```
+Byt ut: wp-content/plugins/life-freedom-system/includes/class-lfs-financial.php
+```
+
+---
+
+## 🚀 SNABB INSTALLATIONSGUIDE
+
+### Steg 1: Backup (VIKTIGT!)
+```bash
+# Ta backup av dina nuvarande filer först
+cp includes/class-lfs-rewards.php includes/class-lfs-rewards.BACKUP.php
+cp includes/class-lfs-financial.php includes/class-lfs-financial.BACKUP.php
+```
+
+### Steg 2: Byt ut PHP-filerna
+```bash
+# Kopiera de uppdaterade filerna
+cp class-lfs-rewards-UPDATED.php includes/class-lfs-rewards.php
+cp class-lfs-financial-UPDATED.php includes/class-lfs-financial.php
+```
+
+### Steg 3: Testa basala funktioner
+1. Gå till WordPress Admin → Freedom System → Belöningar
+2. Sidan bör ladda utan fel
+3. Kontrollera att belöningar visas korrekt
+
+### Steg 4: Lägg till CSS och JavaScript
+Öppna `DUAL_LOCK_IMPLEMENTATION_GUIDE.md` och följ instruktionerna för:
+- CSS-uppdateringar (från rad 268)
+- JavaScript-uppdateringar (från rad 327)
+
+### Steg 5: Uppdatera UI
+Följ guiden för att uppdatera `admin/views/rewards.php` med:
+- Belöningsbudget-widget
+- Nya belöningskort-statuser
+
+---
+
+## 💡 VAD GÖR DUAL-LOCK SYSTEMET?
+
+### Problem (Tidigare):
+```
+❌ Belöningar visades som "tillgängliga" bara baserat på poäng
+❌ Ingen koll på faktiska pengar på belöningskontot
+❌ Risk att lova sig själv belöningar man inte har råd med
+```
+
+### Lösning (Nu):
+```
+✅ Två lås: Både POÄNG och PENGAR måste finnas
+✅ Tydlig indikation om varför en belöning är låst
+✅ Rekommendationer om hur mycket man bör överföra
+✅ Säkerhetskontroll vid inlösen
+✅ Faktiska transaktioner drar pengar från kontot
+```
+
+---
+
+## 📊 EXEMPEL
+
+### Scenario:
+```
+Du har:
+- 800 totala poäng (FP+BP+SP)
+- 100 kr på belöningskontot
+
+Belöningar:
+1. "Fika på café" - 50 kr, 60 poäng
+2. "Middag ute" - 250 kr, 200 poäng
+```
+
+### Före uppdatering:
+```
+✅ Fika på café - TILLGÄNGLIG
+✅ Middag ute - TILLGÄNGLIG
+
+(Men du har bara 100 kr!)
+```
+
+### Efter uppdatering:
+```
+✅ Fika på café - TILLGÄNGLIG
+   (Har både 60+ poäng och 50 kr)
+
+💸 Middag ute - LÅST
+   Saknar 150 kr på belöningskontot
+   Hint: Överför mer pengar för att låsa upp
+```
+
+---
+
+## 🎯 VIKTIGASTE ÄNDRINGAR
+
+### I class-lfs-rewards.php:
+
+**NYA METODER:**
+- `get_actual_reward_account_balance()` - Hämtar faktiskt saldo
+- `calculate_recommended_transfer()` - Beräknar rekommenderad överföring
+- `get_affordable_rewards()` - Returnerar belöningar med detaljerad status
+- `get_most_expensive_affordable_reward()` - Hittar dyraste möjliga belöning
+
+**UPPDATERAD METOD:**
+- `redeem_reward()` - Kollar både poäng OCH pengar innan inlösen
+
+### I class-lfs-financial.php:
+
+**NY METOD:**
+- `get_account_balance($account_name)` - Hämtar specifikt kontos saldo
+
+---
+
+## 🧪 TESTPLAN
+
+### Test 1: Verifiera belöningsstatus
+1. Gå till Belöningar-sidan
+2. Kontrollera att belöningar har olika statuser:
+   - ✅ Gröna (tillgängliga)
+   - 🔒 Blå (låsta pga poäng)
+   - 💸 Röda (låsta pga pengar)
+
+### Test 2: Testa överföring
+1. Överför pengar till belöningskontot
+2. Ladda om belöningssidan
+3. Verifiera att fler belöningar blir tillgängliga
+
+### Test 3: Testa inlösen
+1. Lös in en tillgänglig belöning
+2. Kontrollera att:
+   - Poäng dras av
+   - En transaktion skapas
+   - Belöningskontot minskar
+   - Belöningen markeras som inlöst
+
+### Test 4: Testa säkerhet
+1. Försök lösa in en belöning du inte har råd med
+2. Bör få felmeddelande med exakt belopp som saknas
+
+---
+
+## ⚠️ VIKTIGA NOTERINGAR
+
+### Krav:
+- ✅ Du måste ha ett konto med "belöning" i namnet (case-insensitive)
+- ✅ Taxonomin 'lfs_account' måste finnas
+- ✅ Meta Box plugin måste vara installerat
+
+### Kompatibilitet:
+- ✅ Fungerar med befintlig recurring rewards-funktionalitet
+- ✅ Bakåtkompatibel med gamla belöningar
+- ✅ Påverkar inte befintliga aktiviteter eller transaktioner
+
+### Prestanda:
+- ⚡ Minimal påverkan - bara 2 extra DB-queries per belöningssida-laddning
+- ⚡ Cacheable resultat
+
+---
+
+## 🆘 FELSÖKNING
+
+### Problem 1: "Call to undefined method"
+**Symptom:** PHP-fel om saknad metod
+**Lösning:** Kontrollera att du bytt ut båda PHP-filerna korrekt
+
+### Problem 2: Belöningar visar inte nya statuser
+**Symptom:** Alla belöningar ser likadana ut som förut
+**Lösning:** 
+1. Rensa WordPress cache
+2. Tryck Ctrl+F5 i webbläsaren
+3. Kontrollera att du använder rätt metod i view-filen
+
+### Problem 3: get_account_balance returnerar 0
+**Symptom:** Belöningskonto-saldo visar alltid 0
+**Möjliga orsaker:**
+1. Inget konto med "belöning" i namnet finns
+2. Kontot har fel taxonomy
+3. Inga transaktioner till kontot har skapats än
+
+**Lösning:**
+```php
+// Testa i PHP:
+$financial = LFS_Financial::get_instance();
+$accounts = $financial->get_account_balances();
+print_r($accounts); // Kolla att "Belöningskonto" finns i listan
+```
+
+### Problem 4: Transaktion skapas inte vid inlösen
+**Symptom:** Poäng dras av men inga pengar dras från kontot
+**Lösning:**
+1. Aktivera WP_DEBUG i wp-config.php
+2. Kolla error_log för PHP-fel
+3. Verifiera att belöningskonto term ID hittas korrekt
+
+---
+
+## 📚 LÄSORDNING
+
+För bästa resultat, läs filerna i denna ordning:
+
+1. **📄 README.md** (denna fil) - Översikt
+2. **⚡ SNABBSAMMANFATTNING.md** - Snabb introduktion
+3. **📚 DUAL_LOCK_IMPLEMENTATION_GUIDE.md** - Detaljerad guide
+4. **💻 Kod-filerna** - För implementation
+
+---
+
+## 🎓 FÖRSTÅELSE AV ARKITEKTUREN
+
+### Dataflöde:
+```
+USER EARNS POINTS
+       ↓
+Calculations::get_current_points()
+       ↓
+       +----------> LOCK 1: Points Check
+       |
+       ↓
+Financial::get_account_balance()
+       ↓
+       +----------> LOCK 2: Money Check
+       |
+       ↓
+Rewards::get_affordable_rewards()
+       ↓
+Returns: [
+  {status: 'affordable'},
+  {status: 'locked_points'},
+  {status: 'locked_money'}
+]
+       ↓
+UI displays with correct badges
+```
+
+### Säkerhetsflöde vid inlösen:
+```
+USER CLICKS "LÖS IN"
+       ↓
+Rewards::redeem_reward($id)
+       ↓
+SÄKERHETSKONTROLL 1: Har användaren poäng?
+       ↓ YES
+SÄKERHETSKONTROLL 2: Har användaren pengar?
+       ↓ YES
+Dra av poäng
+       ↓
+Financial::create_transaction()
+       ↓
+Dra faktiska pengar från belöningskonto
+       ↓
+Markera belöning som inlöst
+       ↓
+SUCCESS ✅
+```
+
+---
+
+## 🔮 FRAMTIDA UTVECKLING
+
+### Version 2.1 (Planerad):
+- [ ] Dashboard-widget med belöningsbudget-översikt
+- [ ] Automatisk överföring vid månadsskifte
+- [ ] Push-notiser när belöningskonto är lågt
+- [ ] Belöningshistorik-graf
+
+### Version 2.2 (Under övervägning):
+- [ ] "Spara till belöning"-mål
+- [ ] Gruppbelöningar (dela kostnad)
+- [ ] Belönings-achievements
+- [ ] Extern integration (Swish, etc.)
+
+---
+
+## 🤝 SUPPORT OCH FEEDBACK
+
+Om du stöter på problem eller har frågor:
+
+1. **Kontrollera felsökningen** i denna README
+2. **Läs den detaljerade guiden** för mer tekniska detaljer
+3. **Aktivera WP_DEBUG** för att se felmeddelanden
+4. **Testa metoderna direkt** via PHP för att isolera problemet
+
+---
+
+## 📝 CHANGELOG
+
+### Version 2.0 (2025-01-16)
+- ✨ Nytt: Dual-Lock belöningssystem
+- ✨ Nytt: Kontroll av faktiska pengar på belöningskontot
+- ✨ Nytt: Rekommenderad månadsöverföring
+- ✨ Nytt: Detaljerade lock-statuser (points/money/both)
+- ✨ Nytt: Säkerhetskontroll vid inlösen
+- ✨ Nytt: Automatisk transaktionsskapande vid inlösen
+- 🔧 Förbättring: Tydligare UI med olika färger för olika låsanledningar
+- 🔧 Förbättring: Bättre felmeddelanden med exakta belopp
+
+---
+
+## 📄 LICENS
+
+Detta är en custom-utveckling för Rickard @ Tipping Point.  
+Skapad av Claude (Anthropic) som AI-assistent.
+
+---
+
+## 🎉 GRATTIS!
+
+Du har nu all information och alla filer du behöver för att implementera det nya Dual-Lock belöningssystemet!
+
+**Lycka till med implementeringen!** 🚀
+
+Om något är oklart, tveka inte att fråga.
+
+/Claude
+
+---
+
+**Sist uppdaterad:** 2025-01-16  
+**Version:** 2.0  
+**Status:** Redo för implementation ✅

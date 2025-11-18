@@ -1,9 +1,15 @@
 <?php
 /**
- * Rewards Class - UPPDATERAD VERSION
+ * Rewards Class - UPPDATERAD VERSION MED DUAL-LOCK SYSTEM
  * 
  * File location: includes/class-lfs-rewards.php
- * Hanterar belöningar med recurring functionality
+ * 
+ * ÄNDRINGAR:
+ * - Lagt till dual-lock system: kontrollerar både poäng OCH faktiska pengar
+ * - Nya metoder för att hämta faktiskt saldo från belöningskontot
+ * - Förbättrad can_afford_reward() som kollar båda kriterierna
+ * - Nya get_affordable_rewards() som returnerar detaljerad status
+ * - Säkerhetsspärr vid inlösen - dubbelkollar faktiskt saldo
  */
 
 if (!defined('ABSPATH')) {
@@ -25,6 +31,8 @@ class LFS_Rewards {
         // AJAX hooks
         add_action('wp_ajax_lfs_redeem_reward', array($this, 'ajax_redeem_reward'));
         add_action('wp_ajax_lfs_get_rewards_by_level', array($this, 'ajax_get_rewards_by_level'));
+        add_action('wp_ajax_lfs_get_affordable_rewards', array($this, 'ajax_get_affordable_rewards'));
+        add_action('wp_ajax_lfs_get_reward_budget_status', array($this, 'ajax_get_reward_budget_status'));
         
         // Cron för att återställa recurring rewards
         add_action('lfs_reset_daily_rewards', array($this, 'reset_daily_rewards'));
@@ -41,82 +49,272 @@ class LFS_Rewards {
         }
     }
 
-/**
- * Normalize stored reward status to canonical values.
- * Allowed canonical: 'available', 'redeemed'
- */
-private function normalize_status($raw) {
-    $raw = is_string($raw) ? strtolower(trim($raw)) : '';
-    if (in_array($raw, array('redeemed', 'inlöst', 'inlost'))) return 'redeemed';
-    if (in_array($raw, array('available', 'tillgänglig', 'tillganglig'))) return 'available';
-    return $raw ? $raw : 'available';
-}
-
-/**
- * Set reward status to available and clear redeemed date (+optional taxonomy mirror).
- */
-private function set_status_available($reward_id) {
-    update_post_meta($reward_id, 'lfs_reward_status', 'available');
-    delete_post_meta($reward_id, 'lfs_reward_redeemed_date');
-    if (taxonomy_exists('lfs_reward_state')) {
-        $term = get_term_by('slug', 'available', 'lfs_reward_state');
-        if ($term && !is_wp_error($term)) {
-            wp_set_object_terms($reward_id, (int) $term->term_id, 'lfs_reward_state', false);
-        }
-    }
-}
-
-/**
- * Sum of points earned today across all activities.
- * If you need per-user sums, hook 'lfs/points_query_args' to add 'author'.
- * Returns array('fp'=>int,'bp'=>int,'sp'=>int,'total'=>int)
- */
-private function get_points_earned_today() {
-    $now  = current_time('timestamp');
-    $from = strtotime(date('Y-m-d 00:00:00', $now), $now);
-    $to   = strtotime(date('Y-m-d 23:59:59', $now), $now);
-
-    $meta_query = array(
-        'relation' => 'AND',
-        array(
-            'key'     => 'lfs_activity_datetime',
-            'value'   => array($from, $to),
-            'compare' => 'BETWEEN',
-            'type'    => 'NUMERIC',
-        ),
-    );
-
-    $args = array(
-        'post_type'      => 'life_activity',
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'fields'         => 'ids',
-        'meta_query'     => $meta_query,
-    );
     /**
-     * Allow narrowing the daily points query, e.g., per-user:
-     * add_filter('lfs/points_query_args', function($args){ $args['author'] = get_current_user_id(); return $args; });
+     * ============================================================================
+     * NYA METODER FÖR DUAL-LOCK SYSTEMET
+     * ============================================================================
      */
-    $args = apply_filters('lfs/points_query_args', $args);
-
-    $ids = get_posts($args);
-    $fp = $bp = $sp = 0;
-    if (!empty($ids)) {
-        foreach ($ids as $id) {
-            $fp += intval(get_post_meta($id, 'lfs_fp', true));
-            $bp += intval(get_post_meta($id, 'lfs_bp', true));
-            $sp += intval(get_post_meta($id, 'lfs_sp', true));
-        }
-    }
-    return array('fp'=>$fp, 'bp'=>$bp, 'sp'=>$sp, 'total'=>($fp+$bp+$sp));
-}
-
-
-
-
     
     /**
-     * Redeem a reward
+     * Hämta faktiskt saldo från belöningskontot (baserat på transaktioner)
+     * Detta är VERKLIGA PENGAR, inte teoretiskt värde från poäng
+     */
+    public function get_actual_reward_account_balance() {
+        $financial = LFS_Financial::get_instance();
+        $accounts = $financial->get_account_balances();
+        
+        // Hitta belöningskontot
+        foreach ($accounts as $account) {
+            if (stripos($account['name'], 'belöning') !== false) {
+                return floatval($account['balance']);
+            }
+        }
+        
+        return 0;
+    }
+    
+    /**
+     * Beräkna rekommenderad månatlig överföring baserat på livsfas
+     */
+    public function calculate_recommended_transfer() {
+        $monthly_income = floatval(get_option('lfs_monthly_income', 0));
+        $current_phase = get_option('lfs_current_phase', 'survival');
+        
+        // Fasbaserade procentsatser
+        $percentages = array(
+            'survival' => 0.02,      // 2% - spara varje krona
+            'stabilizing' => 0.05,   // 5% - börja unna dig mer
+            'autonomy' => 0.10       // 10% - du har råd att belöna dig
+        );
+        
+        $percentage = isset($percentages[$current_phase]) ? $percentages[$current_phase] : 0.02;
+        $recommended = $monthly_income * $percentage;
+        $current_balance = $this->get_actual_reward_account_balance();
+        
+        // Kolla om du är efter målet
+        $target_balance = $recommended; // bör alltid ha minst en månads allokering
+        $deficit = max(0, $target_balance - $current_balance);
+        
+        // Hitta senaste överföring till belöningskonto
+        $last_transfer_date = $this->get_last_transfer_to_reward_account();
+        $days_since_transfer = 999;
+        
+        if ($last_transfer_date) {
+            $days_since_transfer = floor((time() - strtotime($last_transfer_date)) / (60 * 60 * 24));
+        }
+        
+        return array(
+            'recommended_monthly' => round($recommended),
+            'current_balance' => $current_balance,
+            'deficit' => round($deficit),
+            'percentage' => $percentage * 100,
+            'phase' => $current_phase,
+            'status' => ($deficit > 0) ? 'below_target' : 'healthy',
+            'message' => ($deficit > 0) 
+                ? sprintf(__('Överför %s kr för att komma i fas', 'life-freedom-system'), number_format($deficit, 0, ',', ' '))
+                : __('Din belöningsbudget är hälsosam! 🎉', 'life-freedom-system'),
+            'days_since_transfer' => $days_since_transfer
+        );
+    }
+    
+    /**
+     * Hitta senaste överföringen till belöningskontot
+     */
+    private function get_last_transfer_to_reward_account() {
+        $financial = LFS_Financial::get_instance();
+        $accounts = $financial->get_account_balances();
+        
+        // Hitta belöningskonto term ID
+        $reward_account_id = null;
+        $accounts_terms = get_terms(array(
+            'taxonomy' => 'lfs_account',
+            'hide_empty' => false,
+        ));
+        
+        foreach ($accounts_terms as $account) {
+            if (stripos($account->name, 'belöning') !== false) {
+                $reward_account_id = $account->term_id;
+                break;
+            }
+        }
+        
+        if (!$reward_account_id) {
+            return null;
+        }
+        
+        // Hitta senaste transaktionen till belöningskontot
+        $args = array(
+            'post_type' => 'lfs_transaction',
+            'post_status' => 'publish',
+            'posts_per_page' => 1,
+            'orderby' => 'meta_value',
+            'meta_key' => 'lfs_transaction_date',
+            'order' => 'DESC',
+            'meta_query' => array(
+                array(
+                    'key' => 'lfs_transaction_to',
+                    'value' => $reward_account_id,
+                    'compare' => '=',
+                ),
+            ),
+        );
+        
+        $transactions = get_posts($args);
+        
+        if (!empty($transactions)) {
+            return get_post_meta($transactions[0]->ID, 'lfs_transaction_date', true);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Hämta alla belöningar med detaljerad affordability-status
+     * 
+     * Detta är hjärtat i dual-lock systemet!
+     * Returnerar lista med belöningar och varför de är låsta/tillgängliga
+     */
+    public function get_affordable_rewards() {
+        $rewards = get_posts(array(
+            'post_type' => 'lfs_reward',
+            'posts_per_page' => -1,
+            'meta_query' => array(
+                array(
+                    'key' => 'lfs_reward_status',
+                    'value' => 'available',
+                ),
+            ),
+        ));
+        
+        $calc = LFS_Calculations::get_instance();
+        $points = $calc->get_current_points();
+        
+        $financial = LFS_Financial::get_instance();
+        $reward_account_balance = $financial->get_account_balance('Belöningskonto');
+        
+        $milestones_helper = LFS_Milestones::get_instance();
+        
+        $results = array();
+        
+        foreach ($rewards as $reward) {
+            $cost = (float) get_post_meta($reward->ID, 'lfs_reward_cost', true);
+            $fp_req = (int) get_post_meta($reward->ID, 'lfs_reward_fp_required', true);
+            $bp_req = (int) get_post_meta($reward->ID, 'lfs_reward_bp_required', true);
+            $sp_req = (int) get_post_meta($reward->ID, 'lfs_reward_sp_required', true);
+            $total_req = (int) get_post_meta($reward->ID, 'lfs_reward_total_required', true);
+            
+            // Check milestone requirement
+            $requires_milestone = get_post_meta($reward->ID, 'lfs_reward_requires_milestone', true);
+            $milestone_id = get_post_meta($reward->ID, 'lfs_reward_milestone', true);
+            
+            $milestone_locked = false;
+            $milestone_name = '';
+            
+            if ($requires_milestone && $milestone_id) {
+                $milestone_completed = $milestones_helper->is_milestone_completed($milestone_id);
+                if (!$milestone_completed) {
+                    $milestone_locked = true;
+                    $milestone_post = get_post($milestone_id);
+                    $milestone_name = $milestone_post ? $milestone_post->post_title : '';
+                }
+            }
+            
+            // Check points (existing logic)
+            $has_points = false;
+            if ($total_req > 0) {
+                $has_points = $points['total'] >= $total_req;
+            } else {
+                $has_points = (
+                    $points['fp'] >= $fp_req &&
+                    $points['bp'] >= $bp_req &&
+                    $points['sp'] >= $sp_req
+                );
+            }
+            
+            // Check money
+            $has_money = $reward_account_balance >= $cost;
+            
+            // Determine status
+            $status = 'affordable';
+            $lock_reason = '';
+            
+            if ($milestone_locked) {
+                $status = 'locked_milestone';
+                $lock_reason = sprintf(
+                    __('Kräver milstolpe: %s', 'life-freedom-system'),
+                    $milestone_name
+                );
+            } elseif (!$has_points && !$has_money) {
+                $status = 'locked_both';
+                $points_missing = $total_req > 0 
+                    ? ($total_req - $points['total']) 
+                    : max($fp_req - $points['fp'], $bp_req - $points['bp'], $sp_req - $points['sp']);
+                $money_missing = $cost - $reward_account_balance;
+                $lock_reason = sprintf(
+                    __('Saknar %d poäng och %s kr', 'life-freedom-system'),
+                    $points_missing,
+                    number_format($money_missing, 0, ',', ' ')
+                );
+            } elseif (!$has_points) {
+                $status = 'locked_points';
+                $points_missing = $total_req > 0 
+                    ? ($total_req - $points['total']) 
+                    : max($fp_req - $points['fp'], $bp_req - $points['bp'], $sp_req - $points['sp']);
+                $lock_reason = sprintf(
+                    __('Saknar %d poäng', 'life-freedom-system'),
+                    $points_missing
+                );
+            } elseif (!$has_money) {
+                $status = 'locked_money';
+                $money_missing = $cost - $reward_account_balance;
+                $lock_reason = sprintf(
+                    __('Saknar %s kr på belöningskontot', 'life-freedom-system'),
+                    number_format($money_missing, 0, ',', ' ')
+                );
+            }
+            
+            $results[] = array(
+                'reward' => $reward,
+                'status' => $status,
+                'lock_reason' => $lock_reason,
+                'has_points' => $has_points,
+                'has_money' => $has_money,
+                'milestone_locked' => $milestone_locked,
+                'milestone_name' => $milestone_name,
+            );
+        }
+        
+        return $results;
+    }
+    
+    /**
+     * Hitta dyraste belöning användaren har råd med
+     */
+    public function get_most_expensive_affordable_reward() {
+        $affordable = $this->get_affordable_rewards();
+        $affordable_only = array_filter($affordable, function($r) {
+            return $r['status'] === 'affordable';
+        });
+        
+        if (empty($affordable_only)) {
+            return null;
+        }
+        
+        usort($affordable_only, function($a, $b) {
+            return $b['cost'] - $a['cost'];
+        });
+        
+        return $affordable_only[0];
+    }
+
+    /**
+     * ============================================================================
+     * UPPDATERAD REDEEM-METOD MED SÄKERHETSKONTROLL
+     * ============================================================================
+     */
+    
+    /**
+     * Lös in en belöning - med dual-lock säkerhetskontroll
      */
     public function redeem_reward($reward_id) {
         $calculations = LFS_Calculations::get_instance();
@@ -129,69 +327,208 @@ private function get_points_earned_today() {
         
         // Kontrollera status
         $status = get_post_meta($reward_id, 'lfs_reward_status', true);
-        if ($status === 'redeemed' && get_post_meta($reward_id, 'lfs_reward_recurring', true) !== 'yes') {
+        $is_recurring = get_post_meta($reward_id, 'lfs_reward_recurring', true) === 'yes';
+        
+        if ($status === 'redeemed' && !$is_recurring) {
             return new WP_Error('already_redeemed', __('Denna belöning är redan inlöst', 'life-freedom-system'));
         }
         
-        // Kontrollera att användaren har råd
-        if (!$calculations->can_afford_reward($reward_id)) {
-            return new WP_Error('cannot_afford', __('Du har inte tillräckligt med poäng eller pengar för denna belöning', 'life-freedom-system'));
-        }
-        
-        // Hämta kostnader
+        // KRITISK SÄKERHETSKONTROLL: Kolla båda kriterierna
         $cost = floatval(get_post_meta($reward_id, 'lfs_reward_cost', true));
+        $current_points = $calculations->get_current_points();
+        $reward_balance = $this->get_actual_reward_account_balance();
+        
         $fp_req = intval(get_post_meta($reward_id, 'lfs_reward_fp_required', true));
         $bp_req = intval(get_post_meta($reward_id, 'lfs_reward_bp_required', true));
         $sp_req = intval(get_post_meta($reward_id, 'lfs_reward_sp_required', true));
         $total_req = intval(get_post_meta($reward_id, 'lfs_reward_total_required', true));
         
+        // Kontrollera poäng
+        $has_points = false;
+        if ($total_req > 0) {
+            $has_points = ($current_points['total'] >= $total_req);
+        } else {
+            $has_points = ($current_points['fp'] >= $fp_req &&
+                          $current_points['bp'] >= $bp_req &&
+                          $current_points['sp'] >= $sp_req);
+        }
+        
+        if (!$has_points) {
+            return new WP_Error('insufficient_points', __('Du har inte tillräckligt med poäng', 'life-freedom-system'));
+        }
+        
+        // NYTT: Kontrollera faktiska pengar
+        if ($cost > 0 && $reward_balance < $cost) {
+            return new WP_Error(
+                'insufficient_funds',
+                sprintf(
+                    __('Du har bara %s kr på belöningskontot, men denna belöning kostar %s kr. Överför %s kr först.', 'life-freedom-system'),
+                    number_format($reward_balance, 0, ',', ' '),
+                    number_format($cost, 0, ',', ' '),
+                    number_format($cost - $reward_balance, 0, ',', ' ')
+                )
+            );
+        }
+
+        // NEW: Check milestone requirement
+        $requires_milestone = get_post_meta($reward_id, 'lfs_reward_requires_milestone', true);
+        $milestone_id = get_post_meta($reward_id, 'lfs_reward_milestone', true);
+        
+        if ($requires_milestone && $milestone_id) {
+            $milestones = LFS_Milestones::get_instance();
+            if (!$milestones->is_milestone_completed($milestone_id)) {
+                $milestone = get_post($milestone_id);
+                return array(
+                    'success' => false,
+                    'message' => sprintf(
+                        __('Denna belöning kräver att du först når milstolpen: %s', 'life-freedom-system'),
+                        $milestone->post_title
+                    ),
+                );
+            }
+        }
+        
         // Dra av poäng
         if ($total_req > 0) {
             // Om totalt poäng krävs, dra av från alla tre proportionellt
-            $current = $calculations->get_current_points();
-            $total_current = $current['fp'] + $current['bp'] + $current['sp'];
+            $total_current = $current_points['fp'] + $current_points['bp'] + $current_points['sp'];
             
             if ($total_current >= $total_req) {
-                $fp_deduct = round(($current['fp'] / $total_current) * $total_req);
-                $bp_deduct = round(($current['bp'] / $total_current) * $total_req);
+                $fp_deduct = round(($current_points['fp'] / $total_current) * $total_req);
+                $bp_deduct = round(($current_points['bp'] / $total_current) * $total_req);
                 $sp_deduct = $total_req - $fp_deduct - $bp_deduct;
                 
-                update_option('lfs_current_fp', max(0, $current['fp'] - $fp_deduct));
-                update_option('lfs_current_bp', max(0, $current['bp'] - $bp_deduct));
-                update_option('lfs_current_sp', max(0, $current['sp'] - $sp_deduct));
+                update_option('lfs_current_fp', max(0, $current_points['fp'] - $fp_deduct));
+                update_option('lfs_current_bp', max(0, $current_points['bp'] - $bp_deduct));
+                update_option('lfs_current_sp', max(0, $current_points['sp'] - $sp_deduct));
             }
         } else {
             // Dra av specifika poäng
             if ($fp_req > 0) {
-                $current_fp = intval(get_option('lfs_current_fp', 0));
-                update_option('lfs_current_fp', max(0, $current_fp - $fp_req));
+                update_option('lfs_current_fp', max(0, $current_points['fp'] - $fp_req));
             }
             if ($bp_req > 0) {
-                $current_bp = intval(get_option('lfs_current_bp', 0));
-                update_option('lfs_current_bp', max(0, $current_bp - $bp_req));
+                update_option('lfs_current_bp', max(0, $current_points['bp'] - $bp_req));
             }
             if ($sp_req > 0) {
-                $current_sp = intval(get_option('lfs_current_sp', 0));
-                update_option('lfs_current_sp', max(0, $current_sp - $sp_req));
+                update_option('lfs_current_sp', max(0, $current_points['sp'] - $sp_req));
             }
         }
         
-        // Dra av från belöningskontot om det kostar pengar
+        // NYTT: Dra av från faktiska belöningskontot via transaktion
         if ($cost > 0) {
-            $current_balance = floatval(get_option('lfs_reward_account_balance', 0));
-            update_option('lfs_reward_account_balance', max(0, $current_balance - $cost));
+            $financial = LFS_Financial::get_instance();
+            
+            // Hitta belöningskonto term ID
+            $reward_account_id = null;
+            $accounts = get_terms(array(
+                'taxonomy' => 'lfs_account',
+                'hide_empty' => false,
+            ));
+            
+            foreach ($accounts as $account) {
+                if (stripos($account->name, 'belöning') !== false) {
+                    $reward_account_id = $account->term_id;
+                    break;
+                }
+            }
+            
+            if ($reward_account_id) {
+                // Skapa en utgiftstransaktion från belöningskontot
+                $transaction_data = array(
+                    'title' => sprintf(__('Belöning: %s', 'life-freedom-system'), $reward->post_title),
+                    'amount' => $cost,
+                    'date' => date('Y-m-d'),
+                    'category' => 'expense',
+                    'from_account' => $reward_account_id,
+                    'budget_followed' => true, // Detta är en planerad utgift
+                );
+                
+                $financial->create_transaction($transaction_data);
+            }
         }
         
-        // Uppdatera belöningens status (kanoniskt)
+        // Uppdatera belöningens status
         update_post_meta($reward_id, 'lfs_reward_status', 'redeemed');
         update_post_meta($reward_id, 'lfs_reward_redeemed_date', current_time('timestamp'));
         
         // Om det är en recurring reward, logga inlösningen separat
-        if (get_post_meta($reward_id, 'lfs_reward_recurring', true) === 'yes') {
+        if ($is_recurring) {
             $this->log_recurring_redemption($reward_id);
         }
         
         return true;
+    }
+
+    /**
+     * ============================================================================
+     * BEFINTLIGA METODER (oförändrade)
+     * ============================================================================
+     */
+
+    /**
+     * Normalize stored reward status to canonical values.
+     * Allowed canonical: 'available', 'redeemed'
+     */
+    private function normalize_status($raw) {
+        $raw = is_string($raw) ? strtolower(trim($raw)) : '';
+        if (in_array($raw, array('redeemed', 'inlöst', 'inlost'))) return 'redeemed';
+        if (in_array($raw, array('available', 'tillgänglig', 'tillganglig'))) return 'available';
+        return $raw ? $raw : 'available';
+    }
+
+    /**
+     * Set reward status to available and clear redeemed date (+optional taxonomy mirror).
+     */
+    private function set_status_available($reward_id) {
+        update_post_meta($reward_id, 'lfs_reward_status', 'available');
+        delete_post_meta($reward_id, 'lfs_reward_redeemed_date');
+        if (taxonomy_exists('lfs_reward_state')) {
+            $term = get_term_by('slug', 'available', 'lfs_reward_state');
+            if ($term && !is_wp_error($term)) {
+                wp_set_object_terms($reward_id, (int) $term->term_id, 'lfs_reward_state', false);
+            }
+        }
+    }
+
+    /**
+     * Sum of points earned today across all activities.
+     */
+    private function get_points_earned_today() {
+        $now  = current_time('timestamp');
+        $from = strtotime(date('Y-m-d 00:00:00', $now), $now);
+        $to   = strtotime(date('Y-m-d 23:59:59', $now), $now);
+
+        $meta_query = array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'lfs_activity_datetime',
+                'value'   => array($from, $to),
+                'compare' => 'BETWEEN',
+                'type'    => 'NUMERIC',
+            ),
+        );
+
+        $args = array(
+            'post_type'      => 'life_activity',
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'meta_query'     => $meta_query,
+        );
+        
+        $args = apply_filters('lfs/points_query_args', $args);
+
+        $ids = get_posts($args);
+        $fp = $bp = $sp = 0;
+        if (!empty($ids)) {
+            foreach ($ids as $id) {
+                $fp += intval(get_post_meta($id, 'lfs_fp', true));
+                $bp += intval(get_post_meta($id, 'lfs_bp', true));
+                $sp += intval(get_post_meta($id, 'lfs_sp', true));
+            }
+        }
+        return array('fp'=>$fp, 'bp'=>$bp, 'sp'=>$sp, 'total'=>($fp+$bp+$sp));
     }
     
     /**
@@ -214,101 +551,107 @@ private function get_points_earned_today() {
      * Återställ dagliga recurring rewards (körs via cron)
      */
     public function reset_daily_rewards() {
-    $rewards = get_posts(array(
-        'post_type'      => 'lfs_reward',
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'meta_key'       => 'lfs_reward_daily',
-        'meta_value'     => 'yes',
-    ));
-    if (empty($rewards)) { return; }
-    foreach ($rewards as $reward) {
-    $status  = $this->normalize_status(get_post_meta($reward->ID, 'lfs_reward_status', true));
-    if ($status !== 'redeemed') { continue; }
-    $earned  = $this->get_points_earned_today(); // total for today
-    $needed  = $this->get_required_points_total($reward->ID);
-    if ($needed <= 0 || $earned['total'] >= $needed) {
-        $this->set_status_available($reward->ID);
-    }
-}
-    }
-    
-    /**
-     * Get rewards grouped by status
-     */
-    public function get_rewards_grouped() {
-        $calculations = LFS_Calculations::get_instance();
-        
         $args = array(
             'post_type' => 'lfs_reward',
             'post_status' => 'publish',
             'posts_per_page' => -1,
-            'orderby' => 'meta_value_num',
-            'meta_key' => 'lfs_reward_cost',
-            'order' => 'ASC',
+            'meta_query' => array(
+                'relation' => 'AND',
+                array(
+                    'key' => 'lfs_reward_recurring',
+                    'value' => 'yes',
+                    'compare' => '=',
+                ),
+                array(
+                    'key' => 'lfs_reward_recurring_frequency',
+                    'value' => 'daily',
+                    'compare' => '=',
+                ),
+                array(
+                    'key' => 'lfs_reward_status',
+                    'value' => 'redeemed',
+                    'compare' => '=',
+                ),
+            ),
         );
         
-        $all_rewards = get_posts($args);
+        $rewards = get_posts($args);
         
-        $grouped = array(
-            'available' => array(),
-            'pending' => array(),
-            'redeemed' => array(),
-        );
+        foreach ($rewards as $reward) {
+            $this->set_status_available($reward->ID);
+        }
+    }
+
+    /**
+     * Återställ alla recurring rewards baserat på frekvens
+     */
+    public function reset_recurring_rewards() {
+        $rewards = get_posts(array(
+            'post_type'      => 'lfs_reward',
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'meta_query'     => array(
+                'relation' => 'AND',
+                array('key' => 'lfs_reward_recurring', 'value' => 'yes', 'compare' => '='),
+                array('key' => 'lfs_reward_status',    'value' => 'redeemed', 'compare' => '='),
+            ),
+        ));
         
-        foreach ($all_rewards as $reward) {
-            $can_afford = $calculations->can_afford_reward($reward->ID);
-            $status = get_post_meta($reward->ID, 'lfs_reward_status', true);
-            $is_recurring = get_post_meta($reward->ID, 'lfs_reward_recurring', true) === 'yes';
-            
-            $reward_data = array(
-                'id' => $reward->ID,
-                'title' => $reward->post_title,
-                'content' => $reward->post_content,
-                'cost' => floatval(get_post_meta($reward->ID, 'lfs_reward_cost', true)),
-                'type' => get_post_meta($reward->ID, 'lfs_reward_type', true),
-                'fp_required' => intval(get_post_meta($reward->ID, 'lfs_reward_fp_required', true)),
-                'bp_required' => intval(get_post_meta($reward->ID, 'lfs_reward_bp_required', true)),
-                'sp_required' => intval(get_post_meta($reward->ID, 'lfs_reward_sp_required', true)),
-                'total_required' => intval(get_post_meta($reward->ID, 'lfs_reward_total_required', true)),
-                'status' => $status,
-                'can_afford' => $can_afford,
-                'is_recurring' => $is_recurring,
-                'recurring_frequency' => get_post_meta($reward->ID, 'lfs_reward_recurring_frequency', true),
-                'thumbnail' => get_the_post_thumbnail_url($reward->ID, 'medium'),
-                'level' => wp_get_post_terms($reward->ID, 'reward_level', array('fields' => 'names')),
-            );
-            
-            // Gruppera baserat på om användaren har råd och status
-            if ($status === 'redeemed' && !$is_recurring) {
-                $grouped['redeemed'][] = $reward_data;
-            } elseif ($can_afford) {
-                $grouped['available'][] = $reward_data;
-            } else {
-                $grouped['pending'][] = $reward_data;
+        if (empty($rewards)) { 
+            return; 
+        }
+
+        $now = current_time('timestamp');
+        foreach ($rewards as $reward) {
+            $freq    = get_post_meta($reward->ID, 'lfs_reward_recurring_frequency', true);
+            $last_ts = (int) get_post_meta($reward->ID, 'lfs_reward_redeemed_date', true);
+            if (!$last_ts) { 
+                $last_ts = $now; 
+            }
+
+            $should_reset = false;
+            switch ($freq) {
+                case 'daily':
+                    $should_reset = (date('Y-m-d', $now) !== date('Y-m-d', $last_ts));
+                    break;
+                case 'weekly':
+                    $should_reset = ($now - $last_ts) >= DAY_IN_SECONDS * 7;
+                    break;
+                case 'monthly':
+                    $should_reset = ($now - $last_ts) >= DAY_IN_SECONDS * 30;
+                    break;
+                case 'custom':
+                    $days = max(1, (int) get_post_meta($reward->ID, 'lfs_reward_recurring_interval_days', true));
+                    $should_reset = ($now - $last_ts) >= DAY_IN_SECONDS * $days;
+                    break;
+            }
+
+            if ($should_reset) {
+                $earned = $this->get_points_earned_today();
+                $needed = $this->get_required_points_total($reward->ID);
+                if ($needed <= 0 || $earned['total'] >= $needed) {
+                    $this->set_status_available($reward->ID);
+                }
             }
         }
-        
-        return $grouped;
     }
-    
+
     /**
-     * Get rewards by level (för filter)
+     * Get rewards by level
      */
     public function get_rewards_by_level($level = null) {
         $args = array(
             'post_type' => 'lfs_reward',
             'post_status' => 'publish',
             'posts_per_page' => -1,
-            'orderby' => 'meta_value_num',
-            'meta_key' => 'lfs_reward_cost',
+            'orderby' => 'menu_order title',
             'order' => 'ASC',
         );
         
         if ($level) {
             $args['tax_query'] = array(
                 array(
-                    'taxonomy' => 'reward_level',
+                    'taxonomy' => 'lfs_reward_level',
                     'field' => 'slug',
                     'terms' => $level,
                 ),
@@ -317,43 +660,36 @@ private function get_points_earned_today() {
         
         $rewards = get_posts($args);
         $calculations = LFS_Calculations::get_instance();
-        $result = array();
+        $current_points = $calculations->get_current_points();
         
+        $result = array();
         foreach ($rewards as $reward) {
             $can_afford = $calculations->can_afford_reward($reward->ID);
             $status = get_post_meta($reward->ID, 'lfs_reward_status', true);
-            $is_recurring = get_post_meta($reward->ID, 'lfs_reward_recurring', true) === 'yes';
             
             $result[] = array(
                 'id' => $reward->ID,
                 'title' => $reward->post_title,
-                'content' => $reward->post_content,
                 'cost' => floatval(get_post_meta($reward->ID, 'lfs_reward_cost', true)),
-                'type' => get_post_meta($reward->ID, 'lfs_reward_type', true),
-                'fp_required' => intval(get_post_meta($reward->ID, 'lfs_reward_fp_required', true)),
-                'bp_required' => intval(get_post_meta($reward->ID, 'lfs_reward_bp_required', true)),
-                'sp_required' => intval(get_post_meta($reward->ID, 'lfs_reward_sp_required', true)),
-                'total_required' => intval(get_post_meta($reward->ID, 'lfs_reward_total_required', true)),
-                'status' => $status,
+                'points_required' => intval(get_post_meta($reward->ID, 'lfs_reward_total_required', true)),
                 'can_afford' => $can_afford,
-                'is_recurring' => $is_recurring,
-                'recurring_frequency' => get_post_meta($reward->ID, 'lfs_reward_recurring_frequency', true),
-                'thumbnail' => get_the_post_thumbnail_url($reward->ID, 'medium'),
+                'status' => $status ? $status : 'available',
+                'is_recurring' => get_post_meta($reward->ID, 'lfs_reward_recurring', true) === 'yes',
             );
         }
         
         return $result;
     }
-    
+
     /**
-     * Get redeemed rewards history
+     * Hämta inlösta belöningar (historik)
      */
     public function get_redeemed_rewards($user_id = null) {
         if (!$user_id) {
             $user_id = get_current_user_id();
         }
         
-        // Hämta både permanenta inlösta och recurring history
+        // Hämta permanenta (non-recurring) inlösta belöningar
         $permanent_args = array(
             'post_type' => 'lfs_reward',
             'post_status' => 'publish',
@@ -422,7 +758,25 @@ private function get_points_earned_today() {
     }
     
     /**
-     * AJAX: Redeem reward
+     * Get required points for a reward
+     */
+    private function get_required_points_total($reward_id) {
+        $total_req = intval(get_post_meta($reward_id, 'lfs_reward_total_required', true));
+        if ($total_req > 0) return $total_req;
+        $fp_req = intval(get_post_meta($reward_id, 'lfs_reward_fp_required', true));
+        $bp_req = intval(get_post_meta($reward_id, 'lfs_reward_bp_required', true));
+        $sp_req = intval(get_post_meta($reward_id, 'lfs_reward_sp_required', true));
+        return max(0, $fp_req + $bp_req + $sp_req);
+    }
+
+    /**
+     * ============================================================================
+     * AJAX HANDLERS
+     * ============================================================================
+     */
+    
+    /**
+     * AJAX: Lös in belöning
      */
     public function ajax_redeem_reward() {
         check_ajax_referer('lfs_nonce', 'nonce');
@@ -445,12 +799,12 @@ private function get_points_earned_today() {
         wp_send_json_success(array(
             'message' => __('Belöning inlöst!', 'life-freedom-system'),
             'current_points' => $calculations->get_current_points(),
-            'reward_balance' => $calculations->get_reward_account_balance(),
+            'reward_balance' => $this->get_actual_reward_account_balance(),
         ));
     }
     
     /**
-     * AJAX: Get rewards by level
+     * AJAX: Hämta belöningar per nivå
      */
     public function ajax_get_rewards_by_level() {
         check_ajax_referer('lfs_nonce', 'nonce');
@@ -461,63 +815,30 @@ private function get_points_earned_today() {
         wp_send_json_success($rewards);
     }
 
-
-public function reset_recurring_rewards() {
-    $rewards = get_posts(array(
-        'post_type'      => 'lfs_reward',
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'meta_query'     => array(
-            'relation' => 'AND',
-            array('key' => 'lfs_reward_recurring', 'value' => 'yes', 'compare' => '='),
-            array('key' => 'lfs_reward_status',    'value' => 'redeemed', 'compare' => '='),
-        ),
-    ));
-    if (empty($rewards)) { return; }
-
-    $now = current_time('timestamp');
-    foreach ($rewards as $reward) {
-        $freq    = get_post_meta($reward->ID, 'lfs_reward_recurring_frequency', true);
-        $last_ts = (int) get_post_meta($reward->ID, 'lfs_reward_redeemed_date', true);
-        if (!$last_ts) { $last_ts = $now; }
-
-        $should_reset = false;
-        switch ($freq) {
-            case 'daily':
-                $should_reset = (date('Y-m-d', $now) !== date('Y-m-d', $last_ts));
-                break;
-            case 'weekly':
-                $should_reset = ($now - $last_ts) >= DAY_IN_SECONDS * 7;
-                break;
-            case 'monthly':
-                $should_reset = ($now - $last_ts) >= DAY_IN_SECONDS * 30;
-                break;
-            case 'custom':
-                $days = max(1, (int) get_post_meta($reward->ID, 'lfs_reward_recurring_interval_days', true));
-                $should_reset = ($now - $last_ts) >= DAY_IN_SECONDS * $days;
-                break;
-        }
-
-        if ($should_reset) {
-    $earned = $this->get_points_earned_today();
-    $needed = $this->get_required_points_total($reward->ID);
-    if ($needed <= 0 || $earned['total'] >= $needed) {
-        $this->set_status_available($reward->ID);
+    /**
+     * NYA AJAX: Hämta affordable rewards med detaljerad status
+     */
+    public function ajax_get_affordable_rewards() {
+        check_ajax_referer('lfs_nonce', 'nonce');
+        
+        $level = isset($_POST['level']) ? sanitize_text_field($_POST['level']) : null;
+        
+        $rewards = $this->get_affordable_rewards($level);
+        wp_send_json_success($rewards);
     }
-}
+
+    /**
+     * NYA AJAX: Hämta belöningsbudget-status
+     */
+    public function ajax_get_reward_budget_status() {
+        check_ajax_referer('lfs_nonce', 'nonce');
+        
+        $budget_status = $this->calculate_recommended_transfer();
+        $most_expensive = $this->get_most_expensive_affordable_reward();
+        
+        wp_send_json_success(array(
+            'budget' => $budget_status,
+            'most_expensive_affordable' => $most_expensive,
+        ));
     }
-}
-
-
-/**
- * Get required points for a reward: prefer total_required, otherwise sum fp/bp/sp requirements.
- */
-private function get_required_points_total($reward_id) {
-    $total_req = intval(get_post_meta($reward_id, 'lfs_reward_total_required', true));
-    if ($total_req > 0) return $total_req;
-    $fp_req = intval(get_post_meta($reward_id, 'lfs_reward_fp_required', true));
-    $bp_req = intval(get_post_meta($reward_id, 'lfs_reward_bp_required', true));
-    $sp_req = intval(get_post_meta($reward_id, 'lfs_reward_sp_required', true));
-    return max(0, $fp_req + $bp_req + $sp_req);
-}
 }

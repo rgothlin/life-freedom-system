@@ -76,6 +76,8 @@ class Life_Freedom_System {
         require_once LFS_PLUGIN_DIR . 'includes/class-lfs-rewards.php';
         require_once LFS_PLUGIN_DIR . 'includes/class-lfs-financial.php';
         require_once LFS_PLUGIN_DIR . 'includes/class-lfs-activity-templates.php';
+        require_once LFS_PLUGIN_DIR . 'includes/class-lfs-recurring-transactions.php';
+        require_once LFS_PLUGIN_DIR . 'includes/class-lfs-milestones.php';
         
         // Initialize classes
         LFS_Meta_Boxes::get_instance();
@@ -84,6 +86,8 @@ class Life_Freedom_System {
         LFS_Rewards::get_instance();
         LFS_Financial::get_instance();
         LFS_Activity_Templates::get_instance();
+        LFS_Recurring_Transactions::get_instance();
+        LFS_Milestones::get_instance();
     }
     
     /**
@@ -202,6 +206,27 @@ class Life_Freedom_System {
             'has_archive' => false,
             'rewrite' => false,
             'show_in_rest' => true,
+        ));
+
+        // Recurring Transaction CPT
+        register_post_type('lfs_recurring_trans', array(
+            'labels' => array(
+                'name' => __('Återkommande transaktioner', 'life-freedom-system'),
+                'singular_name' => __('Återkommande transaktion', 'life-freedom-system'),
+                'add_new' => __('Lägg till', 'life-freedom-system'),
+                'add_new_item' => __('Lägg till ny återkommande transaktion', 'life-freedom-system'),
+                'edit_item' => __('Redigera återkommande transaktion', 'life-freedom-system'),
+                'menu_name' => __('Rec. transactions', 'life-freedom-system'),
+            ),
+            'public' => false,
+            'show_ui' => true,
+            'show_in_menu' => true,//'life-freedom-system', // Makes it appear under main menu
+            'menu_icon' => 'dashicons-backup',
+            'supports' => array('title', 'editor'),
+            'has_archive' => false,
+            'rewrite' => false,
+            'show_in_rest' => true,
+            'capability_type' => 'post',
         ));
     }
     
@@ -411,6 +436,16 @@ class Life_Freedom_System {
             'lfs-points-guidelines',
             array($this, 'render_points_guidelines_page')
         );
+
+        // Recurring Transactions submenu
+        add_submenu_page(
+            'life-freedom-system',
+            __('Återkommande transaktioner', 'life-freedom-system'),
+            __('🔄 Återkommande', 'life-freedom-system'),
+            'manage_options',
+            'lfs-recurring-transactions',
+            array($this, 'render_recurring_transactions_page')
+        );
     }
     
     /**
@@ -453,6 +488,13 @@ class Life_Freedom_System {
      */
     public function render_points_guidelines_page() {
         include LFS_PLUGIN_DIR . 'admin/views/points-guidelines.php';
+    }
+
+    /**
+     * Render recurring transactions page
+     */
+    public function render_recurring_transactions_page() {
+        include LFS_PLUGIN_DIR . 'admin/views/recurring-transactions.php';
     }
     
     /**

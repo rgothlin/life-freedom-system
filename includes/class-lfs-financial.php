@@ -1,8 +1,9 @@
 <?php
 /**
- * Financial Class
+ * Financial Management Class
+ * UPDATED: Fixed balance calculations to handle both incoming and outgoing transactions
  * 
- * Handles financial tracking and account management
+ * File location: includes/class-lfs-financial.php
  */
 
 if (!defined('ABSPATH')) {
@@ -21,14 +22,15 @@ class LFS_Financial {
     }
     
     private function __construct() {
-        // AJAX hooks
+        add_action('save_post_lfs_transaction', array($this, 'calculate_transaction_sp'), 10, 3);
         add_action('wp_ajax_lfs_get_account_balances', array($this, 'ajax_get_account_balances'));
         add_action('wp_ajax_lfs_create_transaction', array($this, 'ajax_create_transaction'));
         add_action('wp_ajax_lfs_get_monthly_summary', array($this, 'ajax_get_monthly_summary'));
     }
     
     /**
-     * Get all account balances
+     * Get balances for all accounts
+     * FIXED: Now correctly handles both incoming and outgoing transactions
      */
     public function get_account_balances() {
         $accounts = get_terms(array(
@@ -39,7 +41,49 @@ class LFS_Financial {
         $balances = array();
         
         foreach ($accounts as $account) {
-            $balance = $this->calculate_account_balance($account->term_id);
+            $balance = 0;
+            
+            // Get all transactions where this account is RECEIVING money (to_account)
+            $incoming_args = array(
+                'post_type' => 'lfs_transaction',
+                'post_status' => 'publish',
+                'posts_per_page' => -1,
+                'meta_query' => array(
+                    array(
+                        'key' => 'lfs_transaction_to',
+                        'value' => $account->term_id,
+                        'compare' => '=',
+                    ),
+                ),
+            );
+            
+            $incoming_transactions = get_posts($incoming_args);
+            
+            foreach ($incoming_transactions as $transaction) {
+                $amount = get_post_meta($transaction->ID, 'lfs_transaction_amount', true);
+                $balance += floatval($amount); // ADD incoming money
+            }
+            
+            // Get all transactions where this account is SENDING money (from_account)
+            $outgoing_args = array(
+                'post_type' => 'lfs_transaction',
+                'post_status' => 'publish',
+                'posts_per_page' => -1,
+                'tax_query' => array(
+                    array(
+                        'taxonomy' => 'lfs_account',
+                        'field' => 'term_id',
+                        'terms' => $account->term_id,
+                    ),
+                ),
+            );
+            
+            $outgoing_transactions = get_posts($outgoing_args);
+            
+            foreach ($outgoing_transactions as $transaction) {
+                $amount = get_post_meta($transaction->ID, 'lfs_transaction_amount', true);
+                $balance -= floatval($amount); // SUBTRACT outgoing money
+            }
             
             $balances[] = array(
                 'id' => $account->term_id,
@@ -52,64 +96,46 @@ class LFS_Financial {
     }
     
     /**
-     * Calculate balance for specific account
+     * Get balance for a specific account by name
+     * 
+     * @param string $account_name Name of the account (case-insensitive, partial match)
+     * @return float Account balance
      */
-    private function calculate_account_balance($account_id) {
-        // Get all transactions for this account
-        $args = array(
-            'post_type' => 'lfs_transaction',
-            'post_status' => 'publish',
-            'posts_per_page' => -1,
-            'tax_query' => array(
-                'relation' => 'OR',
-                array(
-                    'taxonomy' => 'lfs_account',
-                    'field' => 'term_id',
-                    'terms' => $account_id,
-                    'operator' => 'IN',
-                ),
-            ),
-        );
+    public function get_account_balance($account_name) {
+        $balances = $this->get_account_balances();
         
-        $transactions = get_posts($args);
-        $balance = 0;
-        
-        foreach ($transactions as $transaction) {
-            $amount = floatval(get_post_meta($transaction->ID, 'lfs_transaction_amount', true));
-            $from_terms = wp_get_post_terms($transaction->ID, 'lfs_account');
-            $to_account_meta = get_post_meta($transaction->ID, 'lfs_transaction_to', true);
-            
-            // Check if this account received money
-            if ($to_account_meta == $account_id) {
-                $balance += $amount;
-            }
-            
-            // Check if this account sent money
-            if (!empty($from_terms)) {
-                foreach ($from_terms as $term) {
-                    if ($term->term_id == $account_id) {
-                        $balance -= $amount;
-                    }
-                }
+        foreach ($balances as $account) {
+            if (stripos($account['name'], $account_name) !== false) {
+                return floatval($account['balance']);
             }
         }
         
-        return $balance;
+        return 0;
     }
     
     /**
-     * Get monthly financial summary
+     * Get net worth (total across all accounts)
      */
-    public function get_monthly_summary($year = null, $month = null) {
-        if (!$year) {
-            $year = date('Y');
-        }
-        if (!$month) {
-            $month = date('m');
+    public function get_net_worth() {
+        $balances = $this->get_account_balances();
+        $total = 0;
+        
+        foreach ($balances as $account) {
+            $total += $account['balance'];
         }
         
-        $start_date = strtotime("$year-$month-01");
-        $end_date = strtotime(date('Y-m-t', $start_date) . ' 23:59:59');
+        return $total;
+    }
+    
+    /**
+     * Get monthly summary
+     */
+    public function get_monthly_summary($year = null, $month = null) {
+        if (!$year) $year = date('Y');
+        if (!$month) $month = date('m');
+        
+        $start_date = sprintf('%s-%s-01', $year, str_pad($month, 2, '0', STR_PAD_LEFT));
+        $end_date = date('Y-m-t', strtotime($start_date));
         
         $args = array(
             'post_type' => 'lfs_transaction',
@@ -118,7 +144,7 @@ class LFS_Financial {
             'meta_query' => array(
                 array(
                     'key' => 'lfs_transaction_date',
-                    'value' => array(date('Y-m-d', $start_date), date('Y-m-d', $end_date)),
+                    'value' => array($start_date, $end_date),
                     'compare' => 'BETWEEN',
                     'type' => 'DATE',
                 ),
@@ -134,21 +160,23 @@ class LFS_Financial {
             'total_expenses' => 0,
             'total_savings' => 0,
             'to_reward_account' => 0,
+            'sp_earned' => 0,
             'budget_followed' => true,
             'leaks_count' => 0,
-            'sp_earned' => 0,
         );
         
         foreach ($transactions as $transaction) {
             $amount = floatval(get_post_meta($transaction->ID, 'lfs_transaction_amount', true));
             $category = get_post_meta($transaction->ID, 'lfs_transaction_category', true);
-            $budget_followed = get_post_meta($transaction->ID, 'lfs_transaction_budget_followed', true);
             $sp = intval(get_post_meta($transaction->ID, 'lfs_transaction_sp', true));
+            $budget_followed = get_post_meta($transaction->ID, 'lfs_transaction_budget_followed', true) === '1';
             
             $summary['sp_earned'] += $sp;
             
+            // Categorize transactions
             switch ($category) {
                 case 'salary':
+                case 'income':
                     $summary['salary_income'] += $amount;
                     $summary['total_income'] += $amount;
                     break;
@@ -167,9 +195,13 @@ class LFS_Financial {
                     break;
                 
                 case 'transfer':
-                    $to_account = wp_get_post_terms($transaction->ID, 'lfs_account');
-                    if (!empty($to_account) && $to_account[0]->name === 'Belöningskonto') {
-                        $summary['to_reward_account'] += $amount;
+                    // Check if transfer is to reward account
+                    $to_account_id = get_post_meta($transaction->ID, 'lfs_transaction_to', true);
+                    if ($to_account_id) {
+                        $to_account = get_term($to_account_id, 'lfs_account');
+                        if ($to_account && strpos(strtolower($to_account->name), 'belöning') !== false) {
+                            $summary['to_reward_account'] += $amount;
+                        }
                     }
                     break;
             }
@@ -180,11 +212,16 @@ class LFS_Financial {
             }
         }
         
+        // Bonus SP if no leaks this month
+        if ($summary['budget_followed'] && count($transactions) > 0) {
+            $summary['sp_earned'] += 50;
+        }
+        
         return $summary;
     }
     
     /**
-     * Check if there were any "leaks" (moving money from savings accounts)
+     * Check for financial "leaks" (moving money from savings)
      */
     public function check_for_leaks($days = 30) {
         $start_date = date('Y-m-d', strtotime("-{$days} days"));
@@ -210,28 +247,103 @@ class LFS_Financial {
         
         $transactions = get_posts($args);
         
+        $leak_count = count($transactions);
+        $days_since_leak = 0;
+        
+        if ($leak_count === 0) {
+            $last_leak = get_option('lfs_last_leak_date', false);
+            if ($last_leak) {
+                $days_since_leak = floor((time() - strtotime($last_leak)) / (60 * 60 * 24));
+            }
+        } else {
+            // Update last leak date
+            $latest_leak = $transactions[0];
+            $leak_date = get_post_meta($latest_leak->ID, 'lfs_transaction_date', true);
+            update_option('lfs_last_leak_date', $leak_date);
+        }
+        
         return array(
-            'has_leaks' => !empty($transactions),
-            'leak_count' => count($transactions),
+            'has_leaks' => $leak_count > 0,
+            'leak_count' => $leak_count,
             'days_checked' => $days,
+            'days_since_leak' => $days_since_leak,
         );
     }
     
     /**
-     * Create transaction
+     * Calculate SP for transaction
+     */
+    public function calculate_transaction_sp($post_id, $post, $update) {
+        if (wp_is_post_revision($post_id) || $post->post_status !== 'publish') {
+            return;
+        }
+        
+        $amount = floatval(get_post_meta($post_id, 'lfs_transaction_amount', true));
+        $category = get_post_meta($post_id, 'lfs_transaction_category', true);
+        $budget_followed = get_post_meta($post_id, 'lfs_transaction_budget_followed', true) === '1';
+        
+        $sp = 0;
+        
+        // SP rules based on transaction type
+        switch ($category) {
+            case 'salary':
+            case 'income':
+                $sp = 10; // Base SP for receiving income
+                break;
+            
+            case 'project_income':
+                $sp = 25; // More SP for project income
+                break;
+            
+            case 'savings':
+                // SP based on amount saved
+                $sp = min(floor($amount / 100), 50); // 1 SP per 100kr, max 50
+                break;
+            
+            case 'transfer':
+                // Check if transfer to reward account
+                $to_account_id = get_post_meta($post_id, 'lfs_transaction_to', true);
+                if ($to_account_id) {
+                    $to_account = get_term($to_account_id, 'lfs_account');
+                    if ($to_account && strpos(strtolower($to_account->name), 'belöning') !== false) {
+                        $sp = 15;
+                    }
+                }
+                break;
+            
+            case 'expense':
+                // No SP for regular expenses
+                $sp = 0;
+                break;
+        }
+        
+        // Penalty for breaking budget
+        if (!$budget_followed) {
+            $sp = -25; // Lose SP for leaks
+        }
+        
+        update_post_meta($post_id, 'lfs_transaction_sp', $sp);
+    }
+    
+    /**
+     * Create new transaction
      */
     public function create_transaction($data) {
         $required = array('amount', 'date', 'category');
         
         foreach ($required as $field) {
-            if (empty($data[$field])) {
+            if (!isset($data[$field]) || $data[$field] === '') {
                 return new WP_Error('missing_field', sprintf(__('Fält %s krävs', 'life-freedom-system'), $field));
             }
         }
         
+        $title = isset($data['title']) && !empty($data['title']) 
+            ? $data['title'] 
+            : __('Transaktion', 'life-freedom-system') . ' ' . $data['date'];
+        
         $post_id = wp_insert_post(array(
             'post_type' => 'lfs_transaction',
-            'post_title' => isset($data['title']) ? $data['title'] : __('Transaktion', 'life-freedom-system') . ' ' . $data['date'],
+            'post_title' => sanitize_text_field($title),
             'post_status' => 'publish',
         ));
         
@@ -244,19 +356,21 @@ class LFS_Financial {
         update_post_meta($post_id, 'lfs_transaction_date', sanitize_text_field($data['date']));
         update_post_meta($post_id, 'lfs_transaction_category', sanitize_text_field($data['category']));
         
-        if (isset($data['from_account'])) {
+        // Set from account (taxonomy)
+        if (isset($data['from_account']) && !empty($data['from_account'])) {
             wp_set_object_terms($post_id, intval($data['from_account']), 'lfs_account');
         }
         
-        if (isset($data['to_account'])) {
+        // Set to account (meta)
+        if (isset($data['to_account']) && !empty($data['to_account'])) {
             update_post_meta($post_id, 'lfs_transaction_to', intval($data['to_account']));
         }
         
-        if (isset($data['budget_followed'])) {
-            update_post_meta($post_id, 'lfs_transaction_budget_followed', $data['budget_followed'] ? '1' : '0');
-        }
+        // Budget followed flag
+        $budget_followed = isset($data['budget_followed']) ? $data['budget_followed'] : true;
+        update_post_meta($post_id, 'lfs_transaction_budget_followed', $budget_followed ? '1' : '0');
         
-        // Trigger SP calculation (via save_post hook)
+        // Trigger SP calculation
         do_action('save_post_lfs_transaction', $post_id, get_post($post_id), true);
         
         return $post_id;
